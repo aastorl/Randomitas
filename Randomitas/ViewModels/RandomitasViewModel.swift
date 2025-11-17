@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreData
 internal import Combine
 
 class RandomitasViewModel: ObservableObject {
@@ -15,7 +16,8 @@ class RandomitasViewModel: ObservableObject {
     @Published var history: [HistoryEntry] = []
     @Published var viewType: ViewType = .list
     
-    private let historyLimit: TimeInterval = 86400 // 24 horas
+    private let historyLimit: TimeInterval = 86400
+    private let coreDataStack = CoreDataStack.shared
     
     enum ViewType: String {
         case list = "Lista"
@@ -23,139 +25,258 @@ class RandomitasViewModel: ObservableObject {
         case gallery = "Galería"
     }
     
-    // MARK: - Folders Management (Root Level)
+    init() {
+        loadAllData()
+    }
+    
+    private func loadAllData() {
+        loadFolders()
+        loadFavorites()
+        loadFolderFavorites()
+        loadHistory()
+    }
+    
+    private func loadFolders() {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "parent == nil")
+        
+        do {
+            let entities = try coreDataStack.context.fetch(request)
+            folders = entities.map { convertToFolder($0) }
+            print("✅ Carpetas raíz cargadas: \(folders.count)")
+        } catch {
+            print("❌ Error cargando carpetas: \(error)")
+        }
+    }
+    
+    private func loadFavorites() {
+        let request = NSFetchRequest<FavoritesEntity>(entityName: "FavoritesEntity")
+        do {
+            let entities = try coreDataStack.context.fetch(request)
+            favorites = entities.compactMap {
+                guard let id = $0.itemId, let name = $0.itemName, let path = $0.path else { return nil }
+                return (ItemReference(id: id, name: name), path)
+            }
+            print("✅ Favoritos cargados: \(favorites.count)")
+        } catch {
+            print("❌ Error: \(error)")
+        }
+    }
+    
+    private func loadFolderFavorites() {
+        let request = NSFetchRequest<FolderFavoritesEntity>(entityName: "FolderFavoritesEntity")
+        do {
+            let entities = try coreDataStack.context.fetch(request)
+            folderFavorites = entities.compactMap { entity in
+                guard let id = entity.folderId, let name = entity.folderName, let data = entity.pathData else { return nil }
+                if let path = try? JSONDecoder().decode([Int].self, from: data) {
+                    return (FolderReference(id: id, name: name), path)
+                }
+                return nil
+            }
+        } catch {
+            print("❌ Error: \(error)")
+        }
+    }
+    
+    private func loadHistory() {
+        let request = NSFetchRequest<HistoryEntity>(entityName: "HistoryEntity")
+        request.sortDescriptors = [NSSortDescriptor(key: "timestamp", ascending: false)]
+        do {
+            let entities = try coreDataStack.context.fetch(request)
+            history = entities.compactMap {
+                guard let id = $0.id, let name = $0.itemName, let path = $0.path, let ts = $0.timestamp else { return nil }
+                return HistoryEntry(id: id, itemName: name, path: path, timestamp: ts)
+            }
+        } catch {
+            print("❌ Error: \(error)")
+        }
+    }
+    
+    private func convertToFolder(_ entity: FolderEntity) -> Folder {
+        var items: [Item] = []
+        if let itemsSet = entity.items as? Set<ItemEntity> {
+            items = itemsSet.map { convertToItem($0) }
+            if !items.isEmpty {
+                print("  📦 Items encontrados: \(items.count)")
+            }
+        }
+        
+        var subfolders: [Folder] = []
+        if let subfoldersSet = entity.subfolders as? Set<FolderEntity> {
+            subfolders = subfoldersSet.map { convertToFolder($0) }
+            if !subfolders.isEmpty {
+                print("  📁 Subcarpetas encontradas en '\(entity.name ?? "")': \(subfolders.count)")
+            }
+        }
+        
+        return Folder(
+            id: entity.id ?? UUID(),
+            name: entity.name ?? "",
+            items: items,
+            subfolders: subfolders,
+            imageName: entity.imageName
+        )
+    }
+    
+    private func convertToItem(_ entity: ItemEntity) -> Item {
+        return Item(id: entity.id ?? UUID(), name: entity.name ?? "", imageName: entity.imageName, isFavorite: entity.isFavorite)
+    }
+    
+    // MARK: - Folders
     func addRootFolder(name: String) {
-        folders.append(Folder(name: name))
+        let folder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
+        folder.id = UUID()
+        folder.name = name
+        coreDataStack.save()
+        coreDataStack.refresh()
+        loadFolders()
     }
     
     func deleteRootFolder(id: UUID) {
-        folders.removeAll { $0.id == id }
-    }
-    
-    // MARK: - Subfolder Management
-    func addSubfolder(name: String, to folderPath: [Int]) {
-        var current = folders
-        addSubfolderRecursive(&current, name: name, at: folderPath)
-        folders = current
-    }
-    
-    private func addSubfolderRecursive(_ folders: inout [Folder], name: String, at indices: [Int]) {
-        guard !indices.isEmpty else { return }
-        
-        if indices.count == 1 {
-            if let lastIdx = indices.first {
-                folders[lastIdx].subfolders.append(Folder(name: name))
-            }
-        } else {
-            let firstIndex = indices.first!
-            let remainingIndices = Array(indices.dropFirst())
-            addSubfolderRecursive(&folders[firstIndex].subfolders, name: name, at: remainingIndices)
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@ AND parent == nil", id as CVarArg)
+        do {
+            let folders = try coreDataStack.context.fetch(request)
+            folders.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error: \(error)")
         }
+    }
+    
+    // MARK: - Subfolders
+    func addSubfolder(name: String, to folderPath: [Int]) {
+        guard let parent = getFolderEntity(at: folderPath) else {
+            print("❌ No se encontró carpeta padre")
+            return
+        }
+        print("✅ Creando subcarpeta '\(name)' en '\(parent.name ?? "sin nombre")'")
+        
+        let subfolder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
+        subfolder.id = UUID()
+        subfolder.name = name
+        subfolder.parent = parent
+        
+        print("✅ Parent asignado: \(parent.name ?? "")")
+        coreDataStack.save()
+        coreDataStack.refresh()
+        loadFolders()
     }
     
     func deleteSubfolder(id: UUID, from folderPath: [Int]) {
-        var current = folders
-        deleteSubfolderRecursive(&current, id: id, at: folderPath)
-        folders = current
-    }
-    
-    private func deleteSubfolderRecursive(_ folders: inout [Folder], id: UUID, at indices: [Int]) {
-        guard !indices.isEmpty else { return }
-        
-        if indices.count == 1 {
-            if let lastIdx = indices.first {
-                folders[lastIdx].subfolders.removeAll { $0.id == id }
-            }
-        } else {
-            let firstIndex = indices.first!
-            let remainingIndices = Array(indices.dropFirst())
-            deleteSubfolderRecursive(&folders[firstIndex].subfolders, id: id, at: remainingIndices)
+        guard let parent = getFolderEntity(at: folderPath) else { return }
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@ AND parent == %@", id as CVarArg, parent)
+        do {
+            let subs = try coreDataStack.context.fetch(request)
+            subs.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error: \(error)")
         }
     }
     
-    // MARK: - Items Management (Only inside folders)
+    // MARK: - Items
     func addItem(name: String, to folderPath: [Int]) {
-        var current = folders
-        addItemRecursive(&current, name: name, at: folderPath)
-        folders = current
-    }
-    
-    private func addItemRecursive(_ folders: inout [Folder], name: String, at indices: [Int]) {
-        guard !indices.isEmpty else { return }
-        
-        if indices.count == 1 {
-            if let lastIdx = indices.first {
-                folders[lastIdx].items.append(Item(name: name))
-            }
-        } else {
-            let firstIndex = indices.first!
-            let remainingIndices = Array(indices.dropFirst())
-            addItemRecursive(&folders[firstIndex].subfolders, name: name, at: remainingIndices)
-        }
+        guard let folder = getFolderEntity(at: folderPath) else { return }
+        let item = NSEntityDescription.insertNewObject(forEntityName: "ItemEntity", into: coreDataStack.context) as! ItemEntity
+        item.id = UUID()
+        item.name = name
+        item.isFavorite = false
+        item.folder = folder
+        coreDataStack.save()
+        coreDataStack.refresh()
+        loadFolders()
     }
     
     func deleteItem(id: UUID, from folderPath: [Int]) {
-        var current = folders
-        deleteItemRecursive(&current, id: id, at: folderPath)
-        folders = current
+        guard let folder = getFolderEntity(at: folderPath) else { return }
+        let request = NSFetchRequest<ItemEntity>(entityName: "ItemEntity")
+        request.predicate = NSPredicate(format: "id == %@ AND folder == %@", id as CVarArg, folder)
+        do {
+            let items = try coreDataStack.context.fetch(request)
+            items.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error: \(error)")
+        }
     }
     
-    private func deleteItemRecursive(_ folders: inout [Folder], id: UUID, at indices: [Int]) {
-        guard !indices.isEmpty else { return }
+    private func getFolderEntity(at indices: [Int]) -> FolderEntity? {
+        guard !indices.isEmpty, indices[0] < folders.count else {
+            print("❌ Índice fuera de rango: \(indices)")
+            return nil
+        }
         
-        if indices.count == 1 {
-            if let lastIdx = indices.first {
-                folders[lastIdx].items.removeAll { $0.id == id }
+        let folderId = folders[indices[0]].id
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@", folderId as CVarArg)
+        
+        do {
+            guard var current = try coreDataStack.context.fetch(request).first else {
+                print("❌ No se encontró carpeta con ID: \(folderId)")
+                return nil
             }
-        } else {
-            let firstIndex = indices.first!
-            let remainingIndices = Array(indices.dropFirst())
-            deleteItemRecursive(&folders[firstIndex].subfolders, id: id, at: remainingIndices)
+            
+            print("✅ Carpeta encontrada en Core Data: \(current.name ?? "")")
+            
+            for (step, i) in indices.dropFirst().enumerated() {
+                let subfoldersArray = (current.subfolders as? Set<FolderEntity>)?
+                    .sorted { ($0.name ?? "") < ($1.name ?? "") } ?? []
+                
+                guard i < subfoldersArray.count else {
+                    print("❌ Subcarpeta en índice \(i) no encontrada")
+                    return nil
+                }
+                
+                current = subfoldersArray[i]
+                print("✅ Navegado a subcarpeta: \(current.name ?? "")")
+            }
+            
+            return current
+        } catch {
+            print("❌ Error en getFolderEntity: \(error)")
+            return nil
         }
     }
     
     // MARK: - Randomization
     func randomizeFolder(at indices: [Int]) -> (item: Item, path: String)? {
         guard !indices.isEmpty else { return nil }
-        
         let folder = getFolderAtPath(indices)
-        return randomizeFolderInternal(folder, indices: indices)
+        return randomizeFolderInternal(folder)
     }
     
     private func getFolderAtPath(_ indices: [Int]) -> Folder? {
-        guard !indices.isEmpty else { return nil }
-        guard indices[0] < folders.count else { return nil }
-        
+        guard !indices.isEmpty, indices[0] < folders.count else { return nil }
         var current = folders[indices[0]]
-        
         for i in 1..<indices.count {
             guard indices[i] < current.subfolders.count else { return nil }
             current = current.subfolders[indices[i]]
         }
-        
         return current
     }
     
-    private func randomizeFolderInternal(_ folder: Folder?, indices: [Int]) -> (item: Item, path: String)? {
+    private func randomizeFolderInternal(_ folder: Folder?) -> (item: Item, path: String)? {
         guard let folder = folder else { return nil }
-        
         var allItems: [(Item, String)] = []
         collectItems(from: folder, prefix: folder.name, into: &allItems)
-        
         guard let selected = allItems.randomElement() else { return nil }
         
         let entry = HistoryEntry(itemName: selected.0.name, path: selected.1)
-        history.append(entry)
-        addToFavorites(item: selected.0, path: selected.1)
+        saveHistory(entry)
         
         return selected
     }
     
-    private func collectItems(
-        from folder: Folder,
-        prefix: String,
-        into items: inout [(Item, String)]
-    ) {
+    private func collectItems(from folder: Folder, prefix: String, into items: inout [(Item, String)]) {
         for item in folder.items {
             items.append((item, prefix + " > " + item.name))
         }
@@ -164,7 +285,7 @@ class RandomitasViewModel: ObservableObject {
         }
     }
     
-    // MARK: - Folder State Check
+    // MARK: - State Check
     func folderHasItems(at indices: [Int]) -> Bool {
         guard let folder = getFolderAtPath(indices) else { return false }
         return !folder.items.isEmpty
@@ -177,26 +298,45 @@ class RandomitasViewModel: ObservableObject {
     
     func canAddSubfolder(at indices: [Int]) -> Bool {
         guard let folder = getFolderAtPath(indices) else { return false }
-        return folder.items.isEmpty // Solo puede tener subcarpetas si NO tiene items
+        return folder.items.isEmpty
     }
     
     func canAddItems(at indices: [Int]) -> Bool {
         guard let folder = getFolderAtPath(indices) else { return false }
-        return folder.subfolders.isEmpty // Solo puede tener items si NO tiene subcarpetas
+        return folder.subfolders.isEmpty
     }
     
     // MARK: - Favorites
     func toggleFavorite(item: Item, path: String) {
         if let index = favorites.firstIndex(where: { $0.0.id == item.id && $0.1 == path }) {
             favorites.remove(at: index)
+            deleteFavorite(id: item.id, path: path)
         } else {
             favorites.append((ItemReference(id: item.id, name: item.name), path))
+            saveFavorite(id: item.id, name: item.name, path: path)
         }
     }
     
-    private func addToFavorites(item: Item, path: String) {
-        if !favorites.contains(where: { $0.0.id == item.id && $0.1 == path }) {
-            favorites.append((ItemReference(id: item.id, name: item.name), path))
+    private func saveFavorite(id: UUID, name: String, path: String) {
+        let fav = NSEntityDescription.insertNewObject(forEntityName: "FavoritesEntity", into: coreDataStack.context) as! FavoritesEntity
+        fav.id = UUID()
+        fav.itemId = id
+        fav.itemName = name
+        fav.path = path
+        coreDataStack.save()
+        loadFavorites()
+    }
+    
+    private func deleteFavorite(id: UUID, path: String) {
+        let request = NSFetchRequest<FavoritesEntity>(entityName: "FavoritesEntity")
+        request.predicate = NSPredicate(format: "itemId == %@ AND path == %@", id as CVarArg, path)
+        do {
+            let favs = try coreDataStack.context.fetch(request)
+            favs.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            loadFavorites()
+        } catch {
+            print("Error: \(error)")
         }
     }
     
@@ -208,8 +348,35 @@ class RandomitasViewModel: ObservableObject {
     func toggleFolderFavorite(folder: Folder, path: [Int]) {
         if let index = folderFavorites.firstIndex(where: { $0.0.id == folder.id }) {
             folderFavorites.remove(at: index)
+            deleteFolderFavorite(id: folder.id)
         } else {
             folderFavorites.append((FolderReference(id: folder.id, name: folder.name), path))
+            saveFolderFavorite(id: folder.id, name: folder.name, path: path)
+        }
+    }
+    
+    private func saveFolderFavorite(id: UUID, name: String, path: [Int]) {
+        let fav = NSEntityDescription.insertNewObject(forEntityName: "FolderFavoritesEntity", into: coreDataStack.context) as! FolderFavoritesEntity
+        fav.id = UUID()
+        fav.folderId = id
+        fav.folderName = name
+        if let data = try? JSONEncoder().encode(path) {
+            fav.pathData = data
+        }
+        coreDataStack.save()
+        loadFolderFavorites()
+    }
+    
+    private func deleteFolderFavorite(id: UUID) {
+        let request = NSFetchRequest<FolderFavoritesEntity>(entityName: "FolderFavoritesEntity")
+        request.predicate = NSPredicate(format: "folderId == %@", id as CVarArg)
+        do {
+            let favs = try coreDataStack.context.fetch(request)
+            favs.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            loadFolderFavorites()
+        } catch {
+            print("Error: \(error)")
         }
     }
     
@@ -218,13 +385,28 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // MARK: - History
-    func cleanOldHistory() {
-        let cutoffDate = Date().addingTimeInterval(-historyLimit)
-        history.removeAll { $0.timestamp < cutoffDate }
+    private func saveHistory(_ entry: HistoryEntry) {
+        let hist = NSEntityDescription.insertNewObject(forEntityName: "HistoryEntity", into: coreDataStack.context) as! HistoryEntity
+        hist.id = entry.id
+        hist.itemName = entry.itemName
+        hist.path = entry.path
+        hist.timestamp = entry.timestamp
+        history.append(entry)
+        coreDataStack.save()
+        cleanOldHistory()
     }
     
-    // MARK: - Clear Data
-    func deleteAllFolders() {
-        folders.removeAll()
+    func cleanOldHistory() {
+        let cutoff = Date().addingTimeInterval(-historyLimit)
+        let request = NSFetchRequest<HistoryEntity>(entityName: "HistoryEntity")
+        request.predicate = NSPredicate(format: "timestamp < %@", cutoff as NSDate)
+        do {
+            let old = try coreDataStack.context.fetch(request)
+            old.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            history.removeAll { $0.timestamp < cutoff }
+        } catch {
+            print("Error: \(error)")
+        }
     }
 }

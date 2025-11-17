@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="24299" systemVersion="25A354" minimumToolsVersion="Automatic" sourceLanguage="Swift" usedWithSwiftData="YES" userDefinedModelVersionIdentifier="">
+    <entity name="FavoritesEntity" representedClassName="FavoritesEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="itemId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="itemName" optional="YES" attributeType="String"/>
+        <attribute name="path" optional="YES" attributeType="String"/>
+    </entity>
+    <entity name="FolderEntity" representedClassName="FolderEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="imageName" optional="YES" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="items" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ItemEntity" inverseName="folder" inverseEntity="ItemEntity"/>
+        <relationship name="parent" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FolderEntity" inverseName="subfolders" inverseEntity="FolderEntity"/>
+        <relationship name="subfolders" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="FolderEntity" inverseName="parent" inverseEntity="FolderEntity"/>
+    </entity>
+    <entity name="FolderFavoritesEntity" representedClassName="FolderFavoritesEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="folderId" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="folderName" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="pathData" optional="YES" attributeType="Binary"/>
+    </entity>
+    <entity name="HistoryEntity" representedClassName="HistoryEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="itemName" optional="YES" attributeType="String"/>
+        <attribute name="path" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+    </entity>
+    <entity name="ItemEntity" representedClassName="ItemEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="imageName" optional="YES" attributeType="String"/>
+        <attribute name="isFavorite" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <relationship name="folder" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="FolderEntity" inverseName="items" inverseEntity="FolderEntity"/>
+    </entity>
+</model>
