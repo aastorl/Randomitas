@@ -61,14 +61,16 @@ struct FavoritesSheet: View {
                 if !viewModel.favorites.isEmpty {
                     Section(header: Text("Items")) {
                         ForEach(viewModel.favorites, id: \.0.id) { fav in
-                            NavigationLink(value: FavoriteDestination(type: .item, path: [], pathString: fav.1)) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(fav.0.name)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.primary)
-                                    Text(fav.1)
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
+                            if let path = extractFolderPathForItem(from: fav.1) {
+                                NavigationLink(value: FavoriteDestination(type: .item, path: path, pathString: fav.1)) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(fav.0.name)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.primary)
+                                        Text(fav.1)
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
                                 }
                             }
                         }
@@ -137,6 +139,13 @@ struct FavoritesSheet: View {
         }
         
         return current
+    }
+    
+    
+    private func extractFolderPathForItem(from pathString: String) -> [Int]? {
+        // pathString es como "Carpeta > Subcarpeta > Item"
+        // Retornamos la ruta a la carpeta PADRE (sin el item final)
+        return extractFolderPath(from: pathString)
     }
     
     private func extractFolderPath(from pathString: String) -> [Int]? {
