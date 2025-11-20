@@ -111,7 +111,7 @@ struct FavoritesSheet: View {
         guard let folder = getFolderAtPath(path) else { return nil }
         
         return FolderDetailView(
-            folder: folder,
+            folder: FolderWrapper(folder),
             folderPath: path,
             viewModel: viewModel
         )
@@ -121,7 +121,7 @@ struct FavoritesSheet: View {
         guard let folder = getFolderAtPath(path) else { return nil }
         
         return FolderDetailView(
-            folder: folder,
+            folder: FolderWrapper(folder),
             folderPath: path,
             viewModel: viewModel
         )

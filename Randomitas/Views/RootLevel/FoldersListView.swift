@@ -14,13 +14,22 @@ struct FoldersListView: View {
         List {
             ForEach(Array(viewModel.folders.enumerated()), id: \.element.id) { idx, folder in
                 NavigationLink(destination: FolderDetailView(
-                    folder: folder,
+                    folder: FolderWrapper(folder),
                     folderPath: [idx],
                     viewModel: viewModel
                 )) {
                     HStack {
-                        Image(systemName: "folder.fill")
-                            .foregroundColor(.blue)
+                        // Mostrar imagen si existe, sino mostrar ícono
+                        if let imageData = folder.imageData, let uiImage = UIImage(data: imageData) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 30, height: 30)
+                                .cornerRadius(4)
+                        } else {
+                            Image(systemName: "folder.fill")
+                                .foregroundColor(.blue)
+                        }
                         Text(folder.name)
                     }
                 }

@@ -12,19 +12,19 @@ struct Folder: Identifiable, Codable {
     var name: String
     var items: [Item]
     var subfolders: [Folder]
-    var imageName: String?
+    var imageData: Data?
     
     init(
         id: UUID = UUID(),
         name: String,
         items: [Item] = [],
         subfolders: [Folder] = [],
-        imageName: String? = nil
+        imageData: Data? = nil
     ) {
         self.id = id
         self.name = name
         self.items = items
         self.subfolders = subfolders
-        self.imageName = imageName
+        self.imageData = imageData
     }
 }

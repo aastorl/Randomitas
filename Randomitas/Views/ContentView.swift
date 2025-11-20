@@ -109,7 +109,7 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showingResult) {
                 if let result = selectedResult {
-                    ResultSheet(item: result.item, path: result.path, isPresented: $showingResult)
+                    ResultSheet(item: result.item, path: result.path, isPresented: $showingResult, viewModel: viewModel, folderPath: [])
                 }
             }
             .sheet(isPresented: $showingFavorites) {

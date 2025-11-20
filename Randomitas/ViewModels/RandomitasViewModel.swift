@@ -42,7 +42,9 @@ class RandomitasViewModel: ObservableObject {
         
         do {
             let entities = try coreDataStack.context.fetch(request)
-            folders = entities.map { convertToFolder($0) }
+            // Ordenar por nombre para consistencia
+            let sorted = entities.sorted { ($0.name ?? "") < ($1.name ?? "") }
+            folders = sorted.map { convertToFolder($0) }
             print("✅ Carpetas raíz cargadas: \(folders.count)")
         } catch {
             print("❌ Error cargando carpetas: \(error)")
@@ -97,6 +99,7 @@ class RandomitasViewModel: ObservableObject {
         var items: [Item] = []
         if let itemsSet = entity.items as? Set<ItemEntity> {
             items = itemsSet.map { convertToItem($0) }
+                .sorted { $0.name < $1.name }
             if !items.isEmpty {
                 print("  📦 Items encontrados: \(items.count)")
             }
@@ -105,6 +108,7 @@ class RandomitasViewModel: ObservableObject {
         var subfolders: [Folder] = []
         if let subfoldersSet = entity.subfolders as? Set<FolderEntity> {
             subfolders = subfoldersSet.map { convertToFolder($0) }
+                .sorted { $0.name < $1.name }
             if !subfolders.isEmpty {
                 print("  📁 Subcarpetas encontradas en '\(entity.name ?? "")': \(subfolders.count)")
             }
@@ -115,12 +119,17 @@ class RandomitasViewModel: ObservableObject {
             name: entity.name ?? "",
             items: items,
             subfolders: subfolders,
-            imageName: entity.imageName
+            imageData: entity.imageData
         )
     }
     
     private func convertToItem(_ entity: ItemEntity) -> Item {
-        return Item(id: entity.id ?? UUID(), name: entity.name ?? "", imageName: entity.imageName, isFavorite: entity.isFavorite)
+        return Item(
+            id: entity.id ?? UUID(),
+            name: entity.name ?? "",
+            imageData: entity.imageData,
+            isFavorite: entity.isFavorite
+        )
     }
     
     // MARK: - Folders
@@ -183,7 +192,10 @@ class RandomitasViewModel: ObservableObject {
     
     // MARK: - Items
     func addItem(name: String, to folderPath: [Int]) {
-        guard let folder = getFolderEntity(at: folderPath) else { return }
+        guard let folder = getFolderEntity(at: folderPath) else {
+            print("❌ No se encontró la carpeta para agregar el item")
+            return
+        }
         let item = NSEntityDescription.insertNewObject(forEntityName: "ItemEntity", into: coreDataStack.context) as! ItemEntity
         item.id = UUID()
         item.name = name
@@ -210,29 +222,36 @@ class RandomitasViewModel: ObservableObject {
     }
     
     private func getFolderEntity(at indices: [Int]) -> FolderEntity? {
-        guard !indices.isEmpty, indices[0] < folders.count else {
-            print("❌ Índice fuera de rango: \(indices)")
+        guard !indices.isEmpty else {
+            print("❌ Path vacío")
             return nil
         }
         
-        let folderId = folders[indices[0]].id
+        guard indices[0] < folders.count else {
+            print("❌ Índice raíz fuera de rango: \(indices[0]) >= \(folders.count)")
+            return nil
+        }
+        
+        let rootFolderId = folders[indices[0]].id
         let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
-        request.predicate = NSPredicate(format: "id == %@", folderId as CVarArg)
+        request.predicate = NSPredicate(format: "id == %@", rootFolderId as CVarArg)
         
         do {
             guard var current = try coreDataStack.context.fetch(request).first else {
-                print("❌ No se encontró carpeta con ID: \(folderId)")
+                print("❌ No se encontró carpeta raíz con ID: \(rootFolderId)")
                 return nil
             }
             
             print("✅ Carpeta encontrada en Core Data: \(current.name ?? "")")
             
+            // Navegar a través de las subcarpetas
             for (step, i) in indices.dropFirst().enumerated() {
+                // Obtener y ordenar subcarpetas consistentemente
                 let subfoldersArray = (current.subfolders as? Set<FolderEntity>)?
                     .sorted { ($0.name ?? "") < ($1.name ?? "") } ?? []
                 
                 guard i < subfoldersArray.count else {
-                    print("❌ Subcarpeta en índice \(i) no encontrada")
+                    print("❌ Subcarpeta en índice \(i) no encontrada (total: \(subfoldersArray.count))")
                     return nil
                 }
                 
@@ -409,4 +428,41 @@ class RandomitasViewModel: ObservableObject {
             print("Error: \(error)")
         }
     }
+    
+    // MARK: - Images
+    func updateFolderImage(imageData: Data?, at folderPath: [Int]) {
+        guard let entity = getFolderEntity(at: folderPath) else {
+            print("❌ No se encontró la carpeta para actualizar imagen")
+            return
+        }
+        entity.imageData = imageData
+        coreDataStack.save()
+        coreDataStack.refresh()
+        loadFolders()
+    }
+    
+    func updateItemImage(imageData: Data?, itemId: UUID) {
+        let request = NSFetchRequest<ItemEntity>(entityName: "ItemEntity")
+        request.predicate = NSPredicate(format: "id == %@", itemId as CVarArg)
+        
+        do {
+            let items = try coreDataStack.context.fetch(request)
+            items.first?.imageData = imageData
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error: \(error)")
+        }
+    }
+    
+    // MARK: - Helper for getting folder from path
+    func getFolderFromPath(_ path: [Int]) -> Folder? {
+        return getFolderAtPath(path)
+    }
 }
+
+
+
+
+  

@@ -6,9 +6,10 @@
 //
 
 import SwiftUI
+internal import Combine
 
 struct FolderDetailView: View {
-    let folder: Folder
+    @ObservedObject var folder: FolderWrapper
     let folderPath: [Int]
     @ObservedObject var viewModel: RandomitasViewModel
     @Environment(\.dismiss) var dismiss
@@ -40,7 +41,7 @@ struct FolderDetailView: View {
             itemsSection
             emptyStateSection
         }
-        .navigationTitle(folder.name)
+        .navigationTitle(folder.folder.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -71,7 +72,7 @@ struct FolderDetailView: View {
         }
         .sheet(isPresented: $showingResult) {
             if let result = selectedResult {
-                ResultSheet(item: result.item, path: result.path, isPresented: $showingResult)
+                ResultSheet(item: result.item, path: result.path, isPresented: $showingResult, viewModel: viewModel, folderPath: folderPath)
             }
         }
     }
@@ -80,15 +81,24 @@ struct FolderDetailView: View {
     private var subfoldersSection: some View {
         if hasSubfolders {
             Section(header: Text("Subcarpetas")) {
-                ForEach(folder.subfolders, id: \.id) { subfolder in
+                ForEach(folder.folder.subfolders.indices, id: \.self) { idx in
+                    let subfolder = folder.folder.subfolders[idx]
                     NavigationLink(destination: FolderDetailView(
-                        folder: subfolder,
-                        folderPath: folderPath + [folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0],
+                        folder: FolderWrapper(subfolder),
+                        folderPath: folderPath + [idx],
                         viewModel: viewModel
                     )) {
                         HStack {
-                            Image(systemName: "folder.fill")
-                                .foregroundColor(.blue)
+                            if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 30, height: 30)
+                                    .cornerRadius(4)
+                            } else {
+                                Image(systemName: "folder.fill")
+                                    .foregroundColor(.blue)
+                            }
                             Text(subfolder.name)
                         }
                     }
@@ -109,12 +119,33 @@ struct FolderDetailView: View {
     private var itemsSection: some View {
         if hasItems {
             Section(header: Text("Items")) {
-                ForEach(folder.items) { item in
+                ForEach(folder.folder.items, id: \.id) { item in
                     HStack {
+                        if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 30, height: 30)
+                                .cornerRadius(4)
+                        } else {
+                            Image(systemName: "doc.fill")
+                                .foregroundColor(.blue)
+                        }
+                        
                         Text(item.name)
                         Spacer()
-                        Button(action: { viewModel.toggleFavorite(item: item, path: buildPath(item.name)) }) {
-                            Image(systemName: viewModel.isFavorite(itemId: item.id, path: buildPath(item.name)) ? "star.fill" : "star")
+                        
+                        ImageEditorMenu(imageData: Binding(
+                            get: { item.imageData },
+                            set: { viewModel.updateItemImage(imageData: $0, itemId: item.id) }
+                        ))
+                        
+                        Button(action: {
+                            print("⭐ Botón estrella presionado para item: \(item.name)")
+                            let fullPath = buildFullPath(item.name)
+                            viewModel.toggleFavorite(item: item, path: fullPath)
+                        }) {
+                            Image(systemName: viewModel.isFavorite(itemId: item.id, path: buildFullPath(item.name)) ? "star.fill" : "star")
                                 .foregroundColor(.yellow)
                         }
                     }
@@ -143,10 +174,18 @@ struct FolderDetailView: View {
     @ViewBuilder
     private var toolbarButtons: some View {
         HStack(spacing: 16) {
-            Button(action: { viewModel.toggleFolderFavorite(folder: folder, path: folderPath) }) {
-                Image(systemName: viewModel.isFolderFavorite(folderId: folder.id) ? "star.fill" : "star")
+            Button(action: { viewModel.toggleFolderFavorite(folder: folder.folder, path: folderPath) }) {
+                Image(systemName: viewModel.isFolderFavorite(folderId: folder.folder.id) ? "star.fill" : "star")
                     .foregroundColor(.yellow)
             }
+            
+            ImageEditorMenu(imageData: Binding(
+                get: { folder.folder.imageData },
+                set: {
+                    print("🖼️ Intentando actualizar imagen en path: \(folderPath)")
+                    viewModel.updateFolderImage(imageData: $0, at: folderPath)
+                }
+            ))
             
             if canAddSubfolders {
                 Button(action: { showingNewSubfolderSheet = true }) {
@@ -162,8 +201,24 @@ struct FolderDetailView: View {
         }
     }
     
-    private func buildPath(_ itemName: String) -> String {
-        return folder.name + " > " + itemName
+    // Construir ruta completa desde la raíz hasta el item
+    private func buildFullPath(_ itemName: String) -> String {
+        var pathComponents: [String] = []
+        
+        // Obtener la carpeta actual desde el path
+        var currentFolder = viewModel.folders[folderPath[0]]
+        pathComponents.append(currentFolder.name)
+        
+        // Navegar a través de las subcarpetas si existen
+        for i in 1..<folderPath.count {
+            currentFolder = currentFolder.subfolders[folderPath[i]]
+            pathComponents.append(currentFolder.name)
+        }
+        
+        pathComponents.append(itemName)
+        let fullPath = pathComponents.joined(separator: " > ")
+        print("🔗 Ruta generada para item: \(fullPath)")
+        return fullPath
     }
     
     private func randomizeFolder() {
@@ -172,5 +227,13 @@ struct FolderDetailView: View {
         if selectedResult != nil {
             showingResult = true
         }
+    }
+}
+
+class FolderWrapper: ObservableObject {
+    @Published var folder: Folder
+    
+    init(_ folder: Folder) {
+        self.folder = folder
     }
 }
