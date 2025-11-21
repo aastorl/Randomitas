@@ -18,11 +18,19 @@ class RandomitasViewModel: ObservableObject {
     
     private let historyLimit: TimeInterval = 86400
     private let coreDataStack = CoreDataStack.shared
+    private let userDefaults = UserDefaults.standard
     
     enum ViewType: String {
         case list = "Lista"
         case grid = "Cuadrícula"
         case gallery = "Galería"
+    }
+    
+    enum SortType: String {
+        case nameAsc = "name_asc"
+        case nameDesc = "name_desc"
+        case dateNewest = "date_newest"
+        case dateOldest = "date_oldest"
     }
     
     init() {
@@ -327,12 +335,18 @@ class RandomitasViewModel: ObservableObject {
     
     // MARK: - Favorites
     func toggleFavorite(item: Item, path: String) {
+        print("⭐ toggleFavorite llamado: itemId=\(item.id), path=\(path)")
+        print("⭐ Favoritos actuales: \(favorites.map { $0.1 })")
+        
         if let index = favorites.firstIndex(where: { $0.0.id == item.id && $0.1 == path }) {
+            print("⭐ Item ya es favorito, eliminando...")
             favorites.remove(at: index)
             deleteFavorite(id: item.id, path: path)
         } else {
+            print("⭐ Item no es favorito, agregando...")
             favorites.append((ItemReference(id: item.id, name: item.name), path))
             saveFavorite(id: item.id, name: item.name, path: path)
+            print("⭐ Favoritos después de agregar: \(favorites.map { $0.1 })")
         }
     }
     
@@ -431,14 +445,20 @@ class RandomitasViewModel: ObservableObject {
     
     // MARK: - Images
     func updateFolderImage(imageData: Data?, at folderPath: [Int]) {
+        print("📁 updateFolderImage llamado con path: \(folderPath)")
+        print("📁 Carpetas disponibles: \(folders.count), buscando índice: \(folderPath.first ?? -1)")
+        
         guard let entity = getFolderEntity(at: folderPath) else {
-            print("❌ No se encontró la carpeta para actualizar imagen")
+            print("❌ No se encontró la carpeta para actualizar imagen en path: \(folderPath)")
             return
         }
+        
+        print("✅ Carpeta encontrada: \(entity.name ?? "sin nombre")")
         entity.imageData = imageData
         coreDataStack.save()
         coreDataStack.refresh()
         loadFolders()
+        print("✅ Imagen actualizada y carpetas recargadas")
     }
     
     func updateItemImage(imageData: Data?, itemId: UUID) {
@@ -460,8 +480,96 @@ class RandomitasViewModel: ObservableObject {
     func getFolderFromPath(_ path: [Int]) -> Folder? {
         return getFolderAtPath(path)
     }
+    
+    // MARK: - Rename Methods
+    func renameFolder(id: UUID, newName: String) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let folder = try coreDataStack.context.fetch(request).first {
+                folder.name = newName
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+                print("✅ Carpeta renombrada a: \(newName)")
+            }
+        } catch {
+            print("❌ Error renombrando carpeta: \(error)")
+        }
+    }
+    
+    func renameItem(id: UUID, newName: String) {
+        let request = NSFetchRequest<ItemEntity>(entityName: "ItemEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let item = try coreDataStack.context.fetch(request).first {
+                item.name = newName
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+                print("✅ Item renombrado a: \(newName)")
+            }
+        } catch {
+            print("❌ Error renombrando item: \(error)")
+        }
+    }
+    
+    // MARK: - Sort Preferences
+    func getSortType(for folderId: UUID) -> SortType {
+        let key = "sort_\(folderId.uuidString)"
+        if let saved = userDefaults.string(forKey: key), let sortType = SortType(rawValue: saved) {
+            return sortType
+        }
+        return .nameAsc
+    }
+    
+    func setSortType(_ sortType: SortType, for folderId: UUID) {
+        let key = "sort_\(folderId.uuidString)"
+        userDefaults.set(sortType.rawValue, forKey: key)
+        print("💾 Ordenamiento guardado para carpeta: \(sortType.rawValue)")
+    }
+    
+    func sortItems(_ items: [Item], by sortType: SortType) -> [Item] {
+        switch sortType {
+        case .nameAsc:
+            return items.sorted { $0.name < $1.name }
+        case .nameDesc:
+            return items.sorted { $0.name > $1.name }
+        case .dateNewest, .dateOldest:
+            // Por ahora, items no tienen fecha. Ordenamos por nombre como fallback
+            return items.sorted { $0.name < $1.name }
+        }
+    }
+    
+    func sortFolders(_ folders: [Folder], by sortType: SortType) -> [Folder] {
+        switch sortType {
+        case .nameAsc:
+            return folders.sorted { $0.name < $1.name }
+        case .nameDesc:
+            return folders.sorted { $0.name > $1.name }
+        case .dateNewest, .dateOldest:
+            // Por ahora, carpetas no tienen fecha. Ordenamos por nombre como fallback
+            return folders.sorted { $0.name < $1.name }
+        }
+    }
+    
+    // MARK: - View Preferences
+    func getViewType(for folderId: UUID) -> ViewType {
+        let key = "view_\(folderId.uuidString)"
+        if let saved = userDefaults.string(forKey: key), let viewType = ViewType(rawValue: saved) {
+            return viewType
+        }
+        return .list
+    }
+    
+    func setViewType(_ viewType: ViewType, for folderId: UUID) {
+        let key = "view_\(folderId.uuidString)"
+        userDefaults.set(viewType.rawValue, forKey: key)
+        print("💾 Vista guardada para carpeta: \(viewType.rawValue)")
+    }
 }
-
 
 
 

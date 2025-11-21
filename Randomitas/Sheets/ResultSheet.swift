@@ -14,58 +14,176 @@ struct ResultSheet: View {
     let viewModel: RandomitasViewModel
     let folderPath: [Int]
     
+    @State var showingRenameSheet = false
+    @State var isFavorite: Bool = false
+    
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                Button("Cerrar") { isPresented = false }
-                Spacer()
-            }
-            .padding()
-            
-            Spacer()
-            
-            VStack(spacing: 12) {
-                // Mostrar imagen si existe
-                if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 250)
-                        .cornerRadius(12)
-                        .padding()
-                } else {
-                    // Mostrar icono si no hay imagen
-                    Image(systemName: "gift.fill")
-                        .font(.system(size: 64))
-                        .foregroundColor(.purple)
-                }
+        NavigationStack {
+            ZStack {
+                // Fondo
+                Color(.systemBackground).ignoresSafeArea()
                 
-                // Nombre del item
-                Text(item.name)
-                    .font(.title)
-                    .fontWeight(.bold)
-                
-                // Path
-                Text(path)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                
-                // Botones: Editar imagen + Favorito
-                HStack(spacing: 16) {
-                    ImageEditorMenu(imageData: Binding(
-                        get: { item.imageData },
-                        set: { viewModel.updateItemImage(imageData: $0, itemId: item.id) }
-                    ))
+                VStack(spacing: 0) {
+                    // Header
+                    HStack {
+                        Button(action: { isPresented = false }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.left")
+                                Text("Atrás")
+                            }
+                            .foregroundColor(.blue)
+                        }
+                        Spacer()
+                    }
+                    .padding()
                     
-                    Button(action: { viewModel.toggleFavorite(item: item, path: path) }) {
-                        Image(systemName: viewModel.isFavorite(itemId: item.id, path: path) ? "star.fill" : "star")
-                            .foregroundColor(.yellow)
+                    // Content
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Imagen grande
+                            ZStack {
+                                if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(height: 300)
+                                        .clipped()
+                                } else {
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]),
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                    .frame(height: 300)
+                                    .overlay(
+                                        Image(systemName: "doc.fill")
+                                            .font(.system(size: 64))
+                                            .foregroundColor(.gray)
+                                    )
+                                }
+                            }
+                            .cornerRadius(16)
+                            .padding(.horizontal)
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                // Nombre
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Nombre")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Text(item.name)
+                                            .font(.title2)
+                                            .fontWeight(.bold)
+                                    }
+                                    Spacer()
+                                    Button(action: { showingRenameSheet = true }) {
+                                        Image(systemName: "pencil")
+                                            .foregroundColor(.blue)
+                                    }
+                                }
+                                
+                                Divider()
+                                
+                                // Ruta
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Ubicación")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                    Text(path)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(3)
+                                }
+                            }
+                            .padding(.horizontal)
+                            
+                            // Botones de acción
+                            VStack(spacing: 12) {
+                                HStack(spacing: 12) {
+                                    // Favorito
+                                    Button(action: {
+                                        isFavorite.toggle()
+                                        viewModel.toggleFavorite(item: item, path: path)
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: isFavorite ? "star.fill" : "star")
+                                            Text(isFavorite ? "Favorito" : "Agregar")
+                                                .font(.subheadline)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(isFavorite ? Color.yellow.opacity(0.2) : Color(.systemGray6))
+                                        .foregroundColor(isFavorite ? .yellow : .primary)
+                                        .cornerRadius(10)
+                                    }
+                                    
+                                    // Imagen
+                                    Menu {
+                                        Button(action: {}) {
+                                            Label("Tomar foto", systemImage: "camera.fill")
+                                        }
+                                        Button(action: {}) {
+                                            Label("Seleccionar galería", systemImage: "photo.fill")
+                                        }
+                                        if item.imageData != nil {
+                                            Divider()
+                                            Button(role: .destructive, action: {
+                                                viewModel.updateItemImage(imageData: nil, itemId: item.id)
+                                            }) {
+                                                Label("Eliminar imagen", systemImage: "trash")
+                                            }
+                                        }
+                                    } label: {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "photo")
+                                            Text("Imagen")
+                                                .font(.subheadline)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(Color(.systemGray6))
+                                        .foregroundColor(.primary)
+                                        .cornerRadius(10)
+                                    }
+                                }
+                                
+                                // Eliminar
+                                Button(role: .destructive, action: {
+                                    viewModel.deleteItem(id: item.id, from: folderPath)
+                                    isPresented = false
+                                }) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "trash")
+                                        Text("Eliminar item")
+                                            .font(.subheadline)
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.red.opacity(0.2))
+                                    .foregroundColor(.red)
+                                    .cornerRadius(10)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom)
+                        }
                     }
                 }
-                .padding()
             }
-            
-            Spacer()
+            .sheet(isPresented: $showingRenameSheet) {
+                RenameSheet(
+                    itemId: item.id,
+                    currentName: item.name,
+                    onRename: { newName in
+                        viewModel.renameItem(id: item.id, newName: newName)
+                    },
+                    isPresented: $showingRenameSheet
+                )
+            }
+        }
+        .onAppear {
+            isFavorite = viewModel.isFavorite(itemId: item.id, path: path)
         }
     }
 }
