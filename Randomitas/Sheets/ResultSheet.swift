@@ -16,6 +16,8 @@ struct ResultSheet: View {
     
     @State var showingRenameSheet = false
     @State var isFavorite: Bool = false
+    @State var showingImagePicker = false
+    @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
     
     var body: some View {
         NavigationStack {
@@ -120,10 +122,16 @@ struct ResultSheet: View {
                                     
                                     // Imagen
                                     Menu {
-                                        Button(action: {}) {
+                                        Button(action: {
+                                            imageSourceType = .camera
+                                            showingImagePicker = true
+                                        }) {
                                             Label("Tomar foto", systemImage: "camera.fill")
                                         }
-                                        Button(action: {}) {
+                                        Button(action: {
+                                            imageSourceType = .photoLibrary
+                                            showingImagePicker = true
+                                        }) {
                                             Label("Seleccionar galería", systemImage: "photo.fill")
                                         }
                                         if item.imageData != nil {
@@ -180,6 +188,13 @@ struct ResultSheet: View {
                     },
                     isPresented: $showingRenameSheet
                 )
+            }
+            .sheet(isPresented: $showingImagePicker) {
+                ImagePickerView(onImagePicked: { image in
+                    if let data = image.jpegData(compressionQuality: 0.8) {
+                        viewModel.updateItemImage(imageData: data, itemId: item.id)
+                    }
+                }, sourceType: imageSourceType)
             }
         }
         .onAppear {

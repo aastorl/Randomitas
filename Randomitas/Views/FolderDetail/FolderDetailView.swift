@@ -24,6 +24,7 @@ struct FolderDetailView: View {
     @State var currentSortType: RandomitasViewModel.SortType = .nameAsc
     @State var showingImagePicker = false
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
+    @State var selectedItemForImage: Item?
     
     var canAddSubfolders: Bool {
         viewModel.canAddSubfolder(at: folderPath)
@@ -197,8 +198,13 @@ struct FolderDetailView: View {
         .sheet(isPresented: $showingImagePicker) {
             ImagePickerView(onImagePicked: { image in
                 if let data = image.jpegData(compressionQuality: 0.8) {
-                    viewModel.updateFolderImage(imageData: data, at: folderPath)
+                    if let item = selectedItemForImage {
+                        viewModel.updateItemImage(imageData: data, itemId: item.id)
+                    } else {
+                        viewModel.updateFolderImage(imageData: data, at: folderPath)
+                    }
                 }
+                selectedItemForImage = nil
             }, sourceType: imageSourceType)
         }
         .onAppear {
@@ -281,6 +287,41 @@ struct FolderDetailView: View {
                                 Label("Renombrar", systemImage: "pencil")
                             }
                             .tint(.orange)
+                            Button {
+                                selectedItemForImage = item
+                                imageSourceType = .photoLibrary
+                                showingImagePicker = true
+                            } label: {
+                                Label("Imagen", systemImage: "photo")
+                            }
+                            .tint(.blue)
+                        }
+                        .contextMenu {
+                            Button { renameTarget = (item.id, item.name, "item"); showingRenameSheet = true } label: {
+                                Label("Renombrar", systemImage: "pencil")
+                            }
+                            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
+                                Label(viewModel.isFavorite(itemId: item.id, path: itemPath) ? "Quitar Favorito" : "Favorito", systemImage: "star")
+                            }
+                            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
+                                Label("Eliminar", systemImage: "trash")
+                            }
+                            Menu {
+                                Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
+                                    Label("Tomar foto", systemImage: "camera.fill")
+                                }
+                                Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
+                                    Label("Seleccionar de galería", systemImage: "photo.fill")
+                                }
+                                if item.imageData != nil {
+                                    Divider()
+                                    Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
+                                        Label("Eliminar imagen", systemImage: "trash")
+                                    }
+                                }
+                            } label: {
+                                Label("Editar imagen", systemImage: "photo")
+                            }
                         }
                     }
                 }
@@ -336,6 +377,22 @@ struct FolderDetailView: View {
                                     Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
                                         Label("Eliminar", systemImage: "trash")
                                     }
+                                    Menu {
+                                        Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
+                                            Label("Tomar foto", systemImage: "camera.fill")
+                                        }
+                                        Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
+                                            Label("Seleccionar de galería", systemImage: "photo.fill")
+                                        }
+                                        if item.imageData != nil {
+                                            Divider()
+                                            Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
+                                                Label("Eliminar imagen", systemImage: "trash")
+                                            }
+                                        }
+                                    } label: {
+                                        Label("Editar imagen", systemImage: "photo")
+                                    }
                                 }
                         }
                     }
@@ -388,6 +445,22 @@ struct FolderDetailView: View {
                                 Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
                                     Label("Eliminar", systemImage: "trash")
                                 }
+                                Menu {
+                                    Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
+                                        Label("Tomar foto", systemImage: "camera.fill")
+                                    }
+                                    Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
+                                        Label("Seleccionar de galería", systemImage: "photo.fill")
+                                    }
+                                    if item.imageData != nil {
+                                        Divider()
+                                        Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
+                                            Label("Eliminar imagen", systemImage: "trash")
+                                        }
+                                    }
+                                } label: {
+                                    Label("Editar imagen", systemImage: "photo")
+                                }
                             }
                     }
                 }
@@ -408,7 +481,7 @@ struct FolderDetailView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 120)
+                        .frame(width: 100, height: 120)
                         .clipped()
                 } else {
                     LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -429,7 +502,7 @@ struct FolderDetailView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(height: 120)
+                        .frame(width: 100, height: 120)
                         .clipped()
                 } else {
                     LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -449,6 +522,7 @@ struct FolderDetailView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
+                    .frame(maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
             } else {
@@ -476,6 +550,7 @@ struct FolderDetailView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
+                    .frame(maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
             } else {
@@ -497,12 +572,24 @@ struct FolderDetailView: View {
     }
     
     private func buildFullPath(_ itemName: String) -> String {
-        var path = [folder.folder.name]
-        for i in 1..<folderPath.count {
-            path.append(viewModel.folders[folderPath[0]].subfolders[folderPath[i]].name)
+        var pathComponents: [String] = []
+        
+        // Empezamos desde la carpeta raíz
+        if !folderPath.isEmpty {
+            var currentFolder = viewModel.folders[folderPath[0]]
+            pathComponents.append(currentFolder.name)
+            
+            // Recorremos las subcarpetas
+            for i in 1..<folderPath.count {
+                if folderPath[i] < currentFolder.subfolders.count {
+                    currentFolder = currentFolder.subfolders[folderPath[i]]
+                    pathComponents.append(currentFolder.name)
+                }
+            }
         }
-        path.append(itemName)
-        return path.joined(separator: " > ")
+        
+        pathComponents.append(itemName)
+        return pathComponents.joined(separator: " > ")
     }
     
     private func randomizeFolder() {
