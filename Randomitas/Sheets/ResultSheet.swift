@@ -14,10 +14,14 @@ struct ResultSheet: View {
     let viewModel: RandomitasViewModel
     let folderPath: [Int]
     
-    @State var showingRenameSheet = false
     @State var isFavorite: Bool = false
     @State var showingImagePicker = false
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
+    
+    // Inline Renaming
+    @State private var isEditingName = false
+    @State private var editingName = ""
+    @FocusState private var isFocused: Bool
     
     var body: some View {
         NavigationStack {
@@ -74,12 +78,27 @@ struct ResultSheet: View {
                                         Text("Nombre")
                                             .font(.caption)
                                             .foregroundColor(.gray)
-                                        Text(item.name)
-                                            .font(.title2)
-                                            .fontWeight(.bold)
+                                        if isEditingName {
+                                            TextField("Nombre", text: $editingName)
+                                                .font(.title2)
+                                                .fontWeight(.bold)
+                                                .focused($isFocused)
+                                                .onSubmit {
+                                                    viewModel.renameItem(id: item.id, newName: editingName)
+                                                    isEditingName = false
+                                                }
+                                        } else {
+                                            Text(item.name)
+                                                .font(.title2)
+                                                .fontWeight(.bold)
+                                        }
                                     }
                                     Spacer()
-                                    Button(action: { showingRenameSheet = true }) {
+                                    Button(action: { 
+                                        editingName = item.name
+                                        isEditingName = true
+                                        isFocused = true
+                                    }) {
                                         Image(systemName: "pencil")
                                             .foregroundColor(.blue)
                                     }
@@ -179,19 +198,10 @@ struct ResultSheet: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingRenameSheet) {
-                RenameSheet(
-                    itemId: item.id,
-                    currentName: item.name,
-                    onRename: { newName in
-                        viewModel.renameItem(id: item.id, newName: newName)
-                    },
-                    isPresented: $showingRenameSheet
-                )
-            }
             .sheet(isPresented: $showingImagePicker) {
                 ImagePickerView(onImagePicked: { image in
-                    if let data = image.jpegData(compressionQuality: 0.8) {
+                    let resizedImage = image.resized(toMaxDimension: 1024)
+                    if let data = resizedImage.jpegData(compressionQuality: 0.8) {
                         viewModel.updateItemImage(imageData: data, itemId: item.id)
                     }
                 }, sourceType: imageSourceType)

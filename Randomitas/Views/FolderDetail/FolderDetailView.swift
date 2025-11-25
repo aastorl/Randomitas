@@ -25,6 +25,11 @@ struct FolderDetailView: View {
     @State var showingImagePicker = false
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
     @State var selectedItemForImage: Item?
+    @State var showingFavorites = false
+    
+    @State private var editingId: UUID?
+    @State private var editingName: String = ""
+    @FocusState private var isEditing: Bool
     
     var canAddSubfolders: Bool {
         viewModel.canAddSubfolder(at: folderPath)
@@ -147,7 +152,11 @@ struct FolderDetailView: View {
                     }
                     
                     Menu {
-                        Button(action: { renameTarget = (folder.folder.id, folder.folder.name, "folder"); showingRenameSheet = true }) {
+                        Button(action: {
+                            editingId = folder.folder.id
+                            editingName = folder.folder.name
+                            isEditing = true
+                        }) {
                             Label("Renombrar", systemImage: "pencil")
                         }
                         Menu {
@@ -179,25 +188,18 @@ struct FolderDetailView: View {
         .sheet(isPresented: $showingNewItemSheet) {
             NewItemInFolderSheet(viewModel: viewModel, folderPath: folderPath, isPresented: $showingNewItemSheet)
         }
+        .sheet(isPresented: $showingFavorites) {
+            FavoritesSheet(viewModel: viewModel, isPresented: $showingFavorites)
+        }
         .sheet(isPresented: $showingResult) {
             if let result = selectedResult {
                 ResultSheet(item: result.item, path: result.path, isPresented: $showingResult, viewModel: viewModel, folderPath: folderPath)
             }
         }
-        .sheet(isPresented: $showingRenameSheet) {
-            if let target = renameTarget {
-                RenameSheet(itemId: target.id, currentName: target.name, onRename: { newName in
-                    if target.type == "folder" {
-                        viewModel.renameFolder(id: target.id, newName: newName)
-                    } else {
-                        viewModel.renameItem(id: target.id, newName: newName)
-                    }
-                }, isPresented: $showingRenameSheet)
-            }
-        }
         .sheet(isPresented: $showingImagePicker) {
             ImagePickerView(onImagePicked: { image in
-                if let data = image.jpegData(compressionQuality: 0.8) {
+                let resizedImage = image.resized(toMaxDimension: 1024)
+                if let data = resizedImage.jpegData(compressionQuality: 0.8) {
                     if let item = selectedItemForImage {
                         viewModel.updateItemImage(imageData: data, itemId: item.id)
                     } else {
@@ -215,43 +217,13 @@ struct FolderDetailView: View {
         .onChange(of: currentSortType) { viewModel.setSortType($0, for: folder.folder.id) }
     }
     
-    @State var showingFavorites = false
-    
     @ViewBuilder
     private var listView: some View {
         List {
             if hasSubfolders {
                 Section(header: Text("Subcarpetas")) {
                     ForEach(sortedSubfolders, id: \.id) { subfolder in
-                        let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-                        NavigationLink(destination: FolderDetailView(folder: FolderWrapper(subfolder), folderPath: folderPath + [idx], viewModel: viewModel)) {
-                            HStack(spacing: 12) {
-                                if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(width: 40, height: 40)
-                                        .cornerRadius(6)
-                                } else {
-                                    Image(systemName: "folder.fill")
-                                        .foregroundColor(.blue)
-                                        .frame(width: 40, height: 40)
-                                }
-                                Text(subfolder.name)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .foregroundColor(.gray)
-                            }
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath); dismiss() } label: {
-                                Label("Eliminar", systemImage: "trash")
-                            }
-                            Button { renameTarget = (subfolder.id, subfolder.name, "folder"); showingRenameSheet = true } label: {
-                                Label("Renombrar", systemImage: "pencil")
-                            }
-                            .tint(.orange)
-                        }
+                        subfolderRow(subfolder)
                     }
                 }
             }
@@ -259,76 +231,148 @@ struct FolderDetailView: View {
             if hasItems {
                 Section(header: Text("Items")) {
                     ForEach(sortedItems, id: \.id) { item in
-                        let itemPath = buildFullPath(item.name)
-                        HStack(spacing: 12) {
-                            if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                                Image(uiImage: uiImage)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: 40, height: 40)
-                                    .cornerRadius(6)
-                            } else {
-                                Image(systemName: "doc.fill")
-                                    .foregroundColor(.blue)
-                                    .frame(width: 40, height: 40)
-                            }
-                            Text(item.name)
-                            Spacer()
-                            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
-                                Image(systemName: viewModel.isFavorite(itemId: item.id, path: itemPath) ? "star.fill" : "star")
-                                    .foregroundColor(.yellow)
-                            }
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
-                                Label("Eliminar", systemImage: "trash")
-                            }
-                            Button { renameTarget = (item.id, item.name, "item"); showingRenameSheet = true } label: {
-                                Label("Renombrar", systemImage: "pencil")
-                            }
-                            .tint(.orange)
-                            Button {
-                                selectedItemForImage = item
-                                imageSourceType = .photoLibrary
-                                showingImagePicker = true
-                            } label: {
-                                Label("Imagen", systemImage: "photo")
-                            }
-                            .tint(.blue)
-                        }
-                        .contextMenu {
-                            Button { renameTarget = (item.id, item.name, "item"); showingRenameSheet = true } label: {
-                                Label("Renombrar", systemImage: "pencil")
-                            }
-                            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
-                                Label(viewModel.isFavorite(itemId: item.id, path: itemPath) ? "Quitar Favorito" : "Favorito", systemImage: "star")
-                            }
-                            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
-                                Label("Eliminar", systemImage: "trash")
-                            }
-                            Menu {
-                                Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
-                                    Label("Tomar foto", systemImage: "camera.fill")
-                                }
-                                Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
-                                    Label("Seleccionar de galería", systemImage: "photo.fill")
-                                }
-                                if item.imageData != nil {
-                                    Divider()
-                                    Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
-                                        Label("Eliminar imagen", systemImage: "trash")
-                                    }
-                                }
-                            } label: {
-                                Label("Editar imagen", systemImage: "photo")
-                            }
-                        }
+                        itemRow(item)
                     }
                 }
             }
             
             if !hasSubfolders && !hasItems {
                 Text("Vacío").foregroundColor(.gray)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private func subfolderRow(_ subfolder: Folder) -> some View {
+        let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+        NavigationLink(destination: FolderDetailView(folder: FolderWrapper(subfolder), folderPath: folderPath + [idx], viewModel: viewModel)) {
+            HStack(spacing: 12) {
+                if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 40, height: 40)
+                        .clipped()
+                        .cornerRadius(6)
+                } else {
+                    Image(systemName: "folder.fill")
+                        .foregroundColor(.blue)
+                        .frame(width: 40, height: 40)
+                }
+                
+                if editingId == subfolder.id {
+                    TextField("Nombre", text: $editingName)
+                        .focused($isEditing)
+                        .onSubmit {
+                            viewModel.renameFolder(id: subfolder.id, newName: editingName)
+                            editingId = nil
+                        }
+                } else {
+                    Text(subfolder.name)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundColor(.gray)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath); dismiss() } label: {
+                Label("Eliminar", systemImage: "trash")
+            }
+            Button {
+                editingId = subfolder.id
+                editingName = subfolder.name
+                isEditing = true
+            } label: {
+                Label("Renombrar", systemImage: "pencil")
+            }
+            .tint(.orange)
+        }
+    }
+    
+    @ViewBuilder
+    private func itemRow(_ item: Item) -> some View {
+        let itemPath = buildFullPath(item.name)
+        HStack(spacing: 12) {
+            if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 40, height: 40)
+                    .clipped()
+                    .cornerRadius(6)
+            } else {
+                Image(systemName: "doc.fill")
+                    .foregroundColor(.blue)
+                    .frame(width: 40, height: 40)
+            }
+            
+            if editingId == item.id {
+                TextField("Nombre", text: $editingName)
+                    .focused($isEditing)
+                    .onSubmit {
+                        viewModel.renameItem(id: item.id, newName: editingName)
+                        editingId = nil
+                    }
+            } else {
+                Text(item.name)
+            }
+            Spacer()
+            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
+                Image(systemName: viewModel.isFavorite(itemId: item.id, path: itemPath) ? "star.fill" : "star")
+                    .foregroundColor(.yellow)
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
+                Label("Eliminar", systemImage: "trash")
+            }
+            Button {
+                editingId = item.id
+                editingName = item.name
+                isEditing = true
+            } label: {
+                Label("Renombrar", systemImage: "pencil")
+            }
+            .tint(.orange)
+            Button {
+                selectedItemForImage = item
+                imageSourceType = .photoLibrary
+                showingImagePicker = true
+            } label: {
+                Label("Imagen", systemImage: "photo")
+            }
+            .tint(.blue)
+        }
+        .contextMenu {
+            Button {
+                editingId = item.id
+                editingName = item.name
+                isEditing = true
+            } label: {
+                Label("Renombrar", systemImage: "pencil")
+            }
+            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
+                Label(viewModel.isFavorite(itemId: item.id, path: itemPath) ? "Quitar Favorito" : "Favorito", systemImage: "star")
+            }
+            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
+                Label("Eliminar", systemImage: "trash")
+            }
+            Menu {
+                Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
+                    Label("Tomar foto", systemImage: "camera.fill")
+                }
+                Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
+                    Label("Seleccionar de galería", systemImage: "photo.fill")
+                }
+                if item.imageData != nil {
+                    Divider()
+                    Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
+                        Label("Eliminar imagen", systemImage: "trash")
+                    }
+                }
+            } label: {
+                Label("Editar imagen", systemImage: "photo")
             }
         }
     }
@@ -346,7 +390,11 @@ struct FolderDetailView: View {
                                 gridFolderCell(subfolder)
                             }
                             .contextMenu {
-                                Button { renameTarget = (subfolder.id, subfolder.name, "folder"); showingRenameSheet = true } label: {
+                                Button {
+                                    editingId = subfolder.id
+                                    editingName = subfolder.name
+                                    isEditing = true
+                                } label: {
                                     Label("Renombrar", systemImage: "pencil")
                                 }
                                 Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
@@ -368,7 +416,11 @@ struct FolderDetailView: View {
                             let itemPath = buildFullPath(item.name)
                             gridItemCell(item)
                                 .contextMenu {
-                                    Button { renameTarget = (item.id, item.name, "item"); showingRenameSheet = true } label: {
+                                    Button {
+                                        editingId = item.id
+                                        editingName = item.name
+                                        isEditing = true
+                                    } label: {
                                         Label("Renombrar", systemImage: "pencil")
                                     }
                                     Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
@@ -418,7 +470,11 @@ struct FolderDetailView: View {
                             galleryFolderCell(subfolder)
                         }
                         .contextMenu {
-                            Button { renameTarget = (subfolder.id, subfolder.name, "folder"); showingRenameSheet = true } label: {
+                            Button {
+                                editingId = subfolder.id
+                                editingName = subfolder.name
+                                isEditing = true
+                            } label: {
                                 Label("Renombrar", systemImage: "pencil")
                             }
                             Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
@@ -436,7 +492,11 @@ struct FolderDetailView: View {
                         let itemPath = buildFullPath(item.name)
                         galleryItemCell(item)
                             .contextMenu {
-                                Button { renameTarget = (item.id, item.name, "item"); showingRenameSheet = true } label: {
+                                Button {
+                                    editingId = item.id
+                                    editingName = item.name
+                                    isEditing = true
+                                } label: {
                                     Label("Renombrar", systemImage: "pencil")
                                 }
                                 Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
@@ -481,7 +541,8 @@ struct FolderDetailView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 100, height: 120)
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                        .frame(height: 120)
                         .clipped()
                 } else {
                     LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -489,8 +550,22 @@ struct FolderDetailView: View {
                         .overlay(Image(systemName: "folder.fill").font(.system(size: 32)).foregroundColor(.blue))
                 }
             }
+            .frame(height: 120)
             .cornerRadius(8)
-            Text(folder.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+            
+            if editingId == folder.id {
+                TextField("Nombre", text: $editingName)
+                    .focused($isEditing)
+                    .onSubmit {
+                        viewModel.renameFolder(id: folder.id, newName: editingName)
+                        editingId = nil
+                    }
+                    .font(.caption).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            } else {
+                Text(folder.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+            }
         }
     }
     
@@ -502,7 +577,8 @@ struct FolderDetailView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 100, height: 120)
+                        .frame(minWidth: 0, maxWidth: .infinity)
+                        .frame(height: 120)
                         .clipped()
                 } else {
                     LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -510,8 +586,22 @@ struct FolderDetailView: View {
                         .overlay(Image(systemName: "doc.fill").font(.system(size: 32)).foregroundColor(.gray))
                 }
             }
+            .frame(height: 120)
             .cornerRadius(8)
-            Text(item.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+            
+            if editingId == item.id {
+                TextField("Nombre", text: $editingName)
+                    .focused($isEditing)
+                    .onSubmit {
+                        viewModel.renameItem(id: item.id, newName: editingName)
+                        editingId = nil
+                    }
+                    .font(.caption).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            } else {
+                Text(item.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+            }
         }
     }
     
@@ -522,7 +612,7 @@ struct FolderDetailView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
             } else {
@@ -532,14 +622,26 @@ struct FolderDetailView: View {
             }
             
             LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
-                .frame(height: 80)
+                .frame(height: 100)
             
             HStack {
-                Text(folder.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                if editingId == folder.id {
+                    TextField("Nombre", text: $editingName)
+                        .focused($isEditing)
+                        .onSubmit {
+                            viewModel.renameFolder(id: folder.id, newName: editingName)
+                            editingId = nil
+                        }
+                        .font(.headline).fontWeight(.bold).foregroundColor(.white)
+                } else {
+                    Text(folder.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                }
                 Spacer()
             }
             .padding(12)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
         .cornerRadius(12)
     }
     
@@ -550,7 +652,7 @@ struct FolderDetailView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
-                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 0, maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
             } else {
@@ -560,26 +662,36 @@ struct FolderDetailView: View {
             }
             
             LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
-                .frame(height: 80)
+                .frame(height: 100)
             
             HStack {
-                Text(item.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                if editingId == item.id {
+                    TextField("Nombre", text: $editingName)
+                        .focused($isEditing)
+                        .onSubmit {
+                            viewModel.renameItem(id: item.id, newName: editingName)
+                            editingId = nil
+                        }
+                        .font(.headline).fontWeight(.bold).foregroundColor(.white)
+                } else {
+                    Text(item.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                }
                 Spacer()
             }
             .padding(12)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
         .cornerRadius(12)
     }
     
     private func buildFullPath(_ itemName: String) -> String {
         var pathComponents: [String] = []
         
-        // Empezamos desde la carpeta raíz
         if !folderPath.isEmpty {
             var currentFolder = viewModel.folders[folderPath[0]]
             pathComponents.append(currentFolder.name)
             
-            // Recorremos las subcarpetas
             for i in 1..<folderPath.count {
                 if folderPath[i] < currentFolder.subfolders.count {
                     currentFolder = currentFolder.subfolders[folderPath[i]]

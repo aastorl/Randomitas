@@ -16,11 +16,13 @@ struct ContentView: View {
     @State var showingHistory = false
     @State var currentViewType: RandomitasViewModel.ViewType = .list
     @State var currentSortType: RandomitasViewModel.SortType = .nameAsc
-    @State var showingRenameSheet = false
-    @State var renameTarget: (id: UUID, name: String)?
     @State var showingImagePicker = false
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
     @State var selectedFolderId: UUID?
+    
+    @State private var editingId: UUID?
+    @State private var editingName: String = ""
+    @FocusState private var isEditing: Bool
     
     var sortedFolders: [Folder] {
         viewModel.sortFolders(viewModel.folders, by: currentSortType)
@@ -131,17 +133,11 @@ struct ContentView: View {
             .sheet(isPresented: $showingHistory) {
                 HistorySheet(viewModel: viewModel, isPresented: $showingHistory)
             }
-            .sheet(isPresented: $showingRenameSheet) {
-                if let target = renameTarget {
-                    RenameSheet(itemId: target.id, currentName: target.name, onRename: { newName in
-                        viewModel.renameFolder(id: target.id, newName: newName)
-                    }, isPresented: $showingRenameSheet)
-                }
-            }
             .sheet(isPresented: $showingImagePicker) {
                 if let folderId = selectedFolderId, let idx = viewModel.folders.firstIndex(where: { $0.id == folderId }) {
                     ImagePickerView(onImagePicked: { image in
-                        if let data = image.jpegData(compressionQuality: 0.8) {
+                        let resizedImage = image.resized(toMaxDimension: 1024)
+                        if let data = resizedImage.jpegData(compressionQuality: 0.8) {
                             viewModel.updateFolderImage(imageData: data, at: [idx])
                         }
                     }, sourceType: imageSourceType)
@@ -195,13 +191,24 @@ struct ContentView: View {
                                 .resizable()
                                 .scaledToFill()
                                 .frame(width: 40, height: 40)
+                                .clipped()
                                 .cornerRadius(6)
                         } else {
                             Image(systemName: "folder.fill")
                                 .foregroundColor(.blue)
                                 .frame(width: 40, height: 40)
                         }
-                        Text(folder.name)
+
+                        if editingId == folder.id {
+                            TextField("Nombre", text: $editingName)
+                                .focused($isEditing)
+                                .onSubmit {
+                                    viewModel.renameFolder(id: folder.id, newName: editingName)
+                                    editingId = nil
+                                }
+                        } else {
+                            Text(folder.name)
+                        }
                         Spacer()
                         Image(systemName: "chevron.right")
                             .foregroundColor(.gray)
@@ -211,7 +218,11 @@ struct ContentView: View {
                     Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
                         Label("Eliminar", systemImage: "trash")
                     }
-                    Button { renameTarget = (folder.id, folder.name); showingRenameSheet = true } label: {
+                    Button {
+                        editingId = folder.id
+                        editingName = folder.name
+                        isEditing = true
+                    } label: {
                         Label("Renombrar", systemImage: "pencil")
                     }
                     .tint(.orange)
@@ -230,7 +241,11 @@ struct ContentView: View {
                         gridFolderCell(folder)
                     }
                     .contextMenu {
-                        Button { renameTarget = (folder.id, folder.name); showingRenameSheet = true } label: {
+                        Button {
+                            editingId = folder.id
+                            editingName = folder.name
+                            isEditing = true
+                        } label: {
                             Label("Renombrar", systemImage: "pencil")
                         }
                         Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
@@ -256,7 +271,11 @@ struct ContentView: View {
                         galleryFolderCell(folder)
                     }
                     .contextMenu {
-                        Button { renameTarget = (folder.id, folder.name); showingRenameSheet = true } label: {
+                        Button {
+                            editingId = folder.id
+                            editingName = folder.name
+                            isEditing = true
+                        } label: {
                             Label("Renombrar", systemImage: "pencil")
                         }
                         Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
@@ -280,6 +299,7 @@ struct ContentView: View {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFill()
+                        .frame(minWidth: 0, maxWidth: .infinity)
                         .frame(height: 120)
                         .clipped()
                 } else {
@@ -288,8 +308,22 @@ struct ContentView: View {
                         .overlay(Image(systemName: "folder.fill").font(.system(size: 32)).foregroundColor(.blue))
                 }
             }
+            .frame(height: 120)
             .cornerRadius(8)
-            Text(folder.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+            
+            if editingId == folder.id {
+                TextField("Nombre", text: $editingName)
+                    .focused($isEditing)
+                    .onSubmit {
+                        viewModel.renameFolder(id: folder.id, newName: editingName)
+                        editingId = nil
+                    }
+                    .font(.caption).fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            } else {
+                Text(folder.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+            }
         }
     }
     
@@ -300,6 +334,7 @@ struct ContentView: View {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
+                    .frame(minWidth: 0, maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
             } else {
@@ -309,14 +344,26 @@ struct ContentView: View {
             }
             
             LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
-                .frame(height: 80)
+                .frame(height: 100)
             
             HStack {
-                Text(folder.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                if editingId == folder.id {
+                    TextField("Nombre", text: $editingName)
+                        .focused($isEditing)
+                        .onSubmit {
+                            viewModel.renameFolder(id: folder.id, newName: editingName)
+                            editingId = nil
+                        }
+                        .font(.headline).fontWeight(.bold).foregroundColor(.white)
+                } else {
+                    Text(folder.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                }
                 Spacer()
             }
             .padding(12)
         }
+        .frame(maxWidth: .infinity)
+        .frame(height: 300)
         .cornerRadius(12)
     }
     
