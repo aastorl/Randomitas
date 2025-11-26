@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña on 14/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 internal import Combine
 
 struct FolderDetailView: View {
@@ -26,10 +26,17 @@ struct FolderDetailView: View {
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
     @State var selectedItemForImage: Item?
     @State var showingFavorites = false
+    @State var showingMoveCopySheet = false
+    @State var moveCopyItem: Item?
+    @State var moveCopyFolder: Folder?
+    @State var moveCopyPath: [Int] = []
+    @State var isCopyOperation = false
     
     @State private var editingId: UUID?
     @State private var editingName: String = ""
     @FocusState private var isEditing: Bool
+    @State private var pickerID = UUID()
+    @State private var showLabel = false
     
     var canAddSubfolders: Bool {
         viewModel.canAddSubfolder(at: folderPath)
@@ -61,49 +68,44 @@ struct FolderDetailView: View {
             
             VStack(spacing: 0) {
                 // TOOLBAR
-                HStack(spacing: 12) {
-                    if hasItems || hasSubfolders {
-                        Button(action: randomizeFolder) {
-                            Image(systemName: "shuffle")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(height: 44)
-                                .frame(maxWidth: .infinity)
-                                .background(Color.blue)
-                                .cornerRadius(8)
+                HStack(spacing: 25) {
+                    SortMenuView(sortType: $currentSortType)
+                        .foregroundColor(.blue)
+                        .font(.system(size: 18))
+                        .onChange(of: currentSortType) { viewModel.setSortType($0, for: folder.folder.id) }
+                        .frame(maxWidth: .infinity)
+                    
+                    Menu {
+                        Picker("Vista", selection: $currentViewType) {
+                            Text("Lista").tag(RandomitasViewModel.ViewType.list)
+                            Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
+                            Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
                         }
+                        .onChange(of: currentViewType) { newValue in
+                            viewModel.setViewType(newValue, for: folder.folder.id)
+                        }
+                    } label: {
+                        Image(systemName: "rectangle.grid.1x2")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 18))
+                            .frame(maxWidth: .infinity)
                     }
                     
-                    Spacer(minLength: 8)
-                    
-                    HStack(spacing: 10) {
-                        SortMenuView(sortType: $currentSortType)
+                    Menu {
+                        Button(action: { showingNewSubfolderSheet = true }) {
+                            Label("Nueva Subcarpeta", systemImage: "folder.badge.plus")
+                        }
+                        .disabled(!canAddSubfolders)
+                        
+                        Button(action: { showingNewItemSheet = true }) {
+                            Label("Nuevo Item", systemImage: "doc.badge.plus")
+                        }
+                        .disabled(!canAddItems)
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
                             .foregroundColor(.blue)
-                        
-                        Menu {
-                            Picker("Vista", selection: $currentViewType) {
-                                Text("Lista").tag(RandomitasViewModel.ViewType.list)
-                                Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
-                                Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
-                            }
-                        } label: {
-                            Image(systemName: "rectangle.grid.1x2")
-                                .foregroundColor(.blue)
-                        }
-                        
-                        if canAddSubfolders {
-                            Button(action: { showingNewSubfolderSheet = true }) {
-                                Image(systemName: "folder.badge.plus")
-                                    .foregroundColor(.blue)
-                            }
-                        }
-                        
-                        if canAddItems {
-                            Button(action: { showingNewItemSheet = true }) {
-                                Image(systemName: "doc.badge.plus")
-                                    .foregroundColor(.blue)
-                            }
-                        }
+                            .font(.system(size: 20))
+                            .frame(maxWidth: .infinity)
                     }
                 }
                 .padding(.horizontal, 16)
@@ -113,13 +115,67 @@ struct FolderDetailView: View {
                 
                 // CONTENT
                 Group {
-                    switch currentViewType {
-                    case .list:
-                        listView
-                    case .grid:
-                        gridView
-                    case .gallery:
-                        galleryView
+                    if folder.folder.subfolders.isEmpty && folder.folder.items.isEmpty {
+                        emptyState
+                    } else {
+                        switch currentViewType {
+                        case .list:
+                            FolderDetailListView(
+                                viewModel: viewModel,
+                                folder: folder,
+                                folderPath: folderPath,
+                                sortedSubfolders: sortedSubfolders,
+                                sortedItems: sortedItems,
+                                editingId: $editingId,
+                                editingName: $editingName,
+                                isEditing: $isEditing,
+                                imageSourceType: $imageSourceType,
+                                showingImagePicker: $showingImagePicker,
+                                showingMoveCopySheet: $showingMoveCopySheet,
+                                moveCopyItem: $moveCopyItem,
+                                moveCopyFolder: $moveCopyFolder,
+                                moveCopyPath: $moveCopyPath,
+                                isCopyOperation: $isCopyOperation
+                            )
+                        case .grid:
+                            FolderDetailGridView(
+                                viewModel: viewModel,
+                                folder: folder,
+                                folderPath: folderPath,
+                                sortedSubfolders: sortedSubfolders,
+                                sortedItems: sortedItems,
+                                editingId: $editingId,
+                                editingName: $editingName,
+                                isEditing: $isEditing,
+                                selectedItemForImage: $selectedItemForImage,
+                                imageSourceType: $imageSourceType,
+                                showingImagePicker: $showingImagePicker,
+                                showingMoveCopySheet: $showingMoveCopySheet,
+                                moveCopyItem: $moveCopyItem,
+                                moveCopyFolder: $moveCopyFolder,
+                                moveCopyPath: $moveCopyPath,
+                                isCopyOperation: $isCopyOperation
+                            )
+                        case .gallery:
+                            FolderDetailGalleryView(
+                                viewModel: viewModel,
+                                folder: folder,
+                                folderPath: folderPath,
+                                sortedSubfolders: sortedSubfolders,
+                                sortedItems: sortedItems,
+                                editingId: $editingId,
+                                editingName: $editingName,
+                                isEditing: $isEditing,
+                                selectedItemForImage: $selectedItemForImage,
+                                imageSourceType: $imageSourceType,
+                                showingImagePicker: $showingImagePicker,
+                                showingMoveCopySheet: $showingMoveCopySheet,
+                                moveCopyItem: $moveCopyItem,
+                                moveCopyFolder: $moveCopyFolder,
+                                moveCopyPath: $moveCopyPath,
+                                isCopyOperation: $isCopyOperation
+                            )
+                        }
                     }
                 }
             }
@@ -127,18 +183,50 @@ struct FolderDetailView: View {
             // FLOATING BUTTON
             VStack {
                 Spacer()
-                HStack {
-                    Spacer()
+                HStack(spacing: 16) {
+                    if !folder.folder.subfolders.isEmpty || !folder.folder.items.isEmpty {
+                        Button(action: randomize) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "shuffle")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                
+                                if showLabel {
+                                    Text(": Shuffle")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.primary)
+                                        .transition(.move(edge: .leading).combined(with: .opacity))
+                                }
+                                Spacer()
+                            }
+                            .padding(.leading, 20)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(28)
+                            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                            .onAppear {
+                                withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1)) {
+                                    showLabel = true
+                                }
+                            }
+                        }
+                    } else {
+                        Spacer()
+                    }
+                    
                     Button(action: { showingFavorites = true }) {
                         Image(systemName: "star.fill")
                             .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.yellow)
                             .frame(width: 56, height: 56)
-                            .background(Color.yellow)
+                            .background(.ultraThinMaterial)
                             .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
                     }
-                    .padding()
                 }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
             }
         }
         .navigationTitle(folder.folder.name)
@@ -160,10 +248,10 @@ struct FolderDetailView: View {
                             Label("Renombrar", systemImage: "pencil")
                         }
                         Menu {
-                            Button(action: { imageSourceType = .camera; showingImagePicker = true }) {
+                            Button(action: { imageSourceType = .camera; pickerID = UUID(); showingImagePicker = true }) {
                                 Label("Tomar foto", systemImage: "camera.fill")
                             }
-                            Button(action: { imageSourceType = .photoLibrary; showingImagePicker = true }) {
+                            Button(action: { imageSourceType = .photoLibrary; pickerID = UUID(); showingImagePicker = true }) {
                                 Label("Seleccionar de galería", systemImage: "photo.fill")
                             }
                             if folder.folder.imageData != nil {
@@ -188,13 +276,13 @@ struct FolderDetailView: View {
         .sheet(isPresented: $showingNewItemSheet) {
             NewItemInFolderSheet(viewModel: viewModel, folderPath: folderPath, isPresented: $showingNewItemSheet)
         }
-        .sheet(isPresented: $showingFavorites) {
-            FavoritesSheet(viewModel: viewModel, isPresented: $showingFavorites)
-        }
         .sheet(isPresented: $showingResult) {
             if let result = selectedResult {
                 ResultSheet(item: result.item, path: result.path, isPresented: $showingResult, viewModel: viewModel, folderPath: folderPath)
             }
+        }
+        .sheet(isPresented: $showingFavorites) {
+            FavoritesSheet(viewModel: viewModel, isPresented: $showingFavorites)
         }
         .sheet(isPresented: $showingImagePicker) {
             ImagePickerView(onImagePicked: { image in
@@ -208,505 +296,75 @@ struct FolderDetailView: View {
                 }
                 selectedItemForImage = nil
             }, sourceType: imageSourceType)
+            .id(pickerID)
+        }
+        .sheet(isPresented: $showingMoveCopySheet) {
+            MoveCopySheet(
+                viewModel: viewModel,
+                isPresented: $showingMoveCopySheet,
+                itemToMove: moveCopyItem,
+                folderToMove: moveCopyFolder,
+                currentPath: moveCopyPath,
+                isCopy: isCopyOperation
+            )
         }
         .onAppear {
             currentViewType = viewModel.getViewType(for: folder.folder.id)
             currentSortType = viewModel.getSortType(for: folder.folder.id)
         }
-        .onChange(of: currentViewType) { viewModel.setViewType($0, for: folder.folder.id) }
-        .onChange(of: currentSortType) { viewModel.setSortType($0, for: folder.folder.id) }
     }
     
     @ViewBuilder
-    private var listView: some View {
-        List {
-            if hasSubfolders {
-                Section(header: Text("Subcarpetas")) {
-                    ForEach(sortedSubfolders, id: \.id) { subfolder in
-                        subfolderRow(subfolder)
-                    }
-                }
-            }
-            
-            if hasItems {
-                Section(header: Text("Items")) {
-                    ForEach(sortedItems, id: \.id) { item in
-                        itemRow(item)
-                    }
-                }
-            }
-            
-            if !hasSubfolders && !hasItems {
-                Text("Vacío").foregroundColor(.gray)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func subfolderRow(_ subfolder: Folder) -> some View {
-        let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-        NavigationLink(destination: FolderDetailView(folder: FolderWrapper(subfolder), folderPath: folderPath + [idx], viewModel: viewModel)) {
-            HStack(spacing: 12) {
-                if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 40, height: 40)
-                        .clipped()
-                        .cornerRadius(6)
-                } else {
-                    Image(systemName: "folder.fill")
-                        .foregroundColor(.blue)
-                        .frame(width: 40, height: 40)
-                }
-                
-                if editingId == subfolder.id {
-                    TextField("Nombre", text: $editingName)
-                        .focused($isEditing)
-                        .onSubmit {
-                            viewModel.renameFolder(id: subfolder.id, newName: editingName)
-                            editingId = nil
-                        }
-                } else {
-                    Text(subfolder.name)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.gray)
-            }
-        }
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath); dismiss() } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
-            Button {
-                editingId = subfolder.id
-                editingName = subfolder.name
-                isEditing = true
-            } label: {
-                Label("Renombrar", systemImage: "pencil")
-            }
-            .tint(.orange)
-        }
-    }
-    
-    @ViewBuilder
-    private func itemRow(_ item: Item) -> some View {
-        let itemPath = buildFullPath(item.name)
-        HStack(spacing: 12) {
-            if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 40, height: 40)
-                    .clipped()
-                    .cornerRadius(6)
-            } else {
-                Image(systemName: "doc.fill")
-                    .foregroundColor(.blue)
-                    .frame(width: 40, height: 40)
-            }
-            
-            if editingId == item.id {
-                TextField("Nombre", text: $editingName)
-                    .focused($isEditing)
-                    .onSubmit {
-                        viewModel.renameItem(id: item.id, newName: editingName)
-                        editingId = nil
-                    }
-            } else {
-                Text(item.name)
-            }
+    private var emptyState: some View {
+        VStack(spacing: 20) {
             Spacer()
-            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
-                Image(systemName: viewModel.isFavorite(itemId: item.id, path: itemPath) ? "star.fill" : "star")
-                    .foregroundColor(.yellow)
+            Image(systemName: "folder.badge.questionmark")
+                .font(.system(size: 60))
+                .foregroundColor(.gray)
+            
+            VStack(spacing: 8) {
+                Text("Carpeta vacía")
+                    .font(.headline)
+                Text("Agrega subcarpetas o items")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
             }
-        }
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
-            Button {
-                editingId = item.id
-                editingName = item.name
-                isEditing = true
-            } label: {
-                Label("Renombrar", systemImage: "pencil")
-            }
-            .tint(.orange)
-            Button {
-                selectedItemForImage = item
-                imageSourceType = .photoLibrary
-                showingImagePicker = true
-            } label: {
-                Label("Imagen", systemImage: "photo")
-            }
-            .tint(.blue)
-        }
-        .contextMenu {
-            Button {
-                editingId = item.id
-                editingName = item.name
-                isEditing = true
-            } label: {
-                Label("Renombrar", systemImage: "pencil")
-            }
-            Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
-                Label(viewModel.isFavorite(itemId: item.id, path: itemPath) ? "Quitar Favorito" : "Favorito", systemImage: "star")
-            }
-            Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
-            Menu {
-                Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
-                    Label("Tomar foto", systemImage: "camera.fill")
-                }
-                Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
-                    Label("Seleccionar de galería", systemImage: "photo.fill")
-                }
-                if item.imageData != nil {
-                    Divider()
-                    Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
-                        Label("Eliminar imagen", systemImage: "trash")
+            
+            HStack(spacing: 16) {
+                Button(action: { showingNewSubfolderSheet = true }) {
+                    VStack {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.title2)
+                        Text("Subcarpeta")
+                            .font(.caption)
                     }
-                }
-            } label: {
-                Label("Editar imagen", systemImage: "photo")
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private var gridView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if hasSubfolders {
-                    Text("Subcarpetas").font(.headline).padding(.horizontal)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
-                        ForEach(sortedSubfolders, id: \.id) { subfolder in
-                            let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-                            NavigationLink(destination: FolderDetailView(folder: FolderWrapper(subfolder), folderPath: folderPath + [idx], viewModel: viewModel)) {
-                                gridFolderCell(subfolder)
-                            }
-                            .contextMenu {
-                                Button {
-                                    editingId = subfolder.id
-                                    editingName = subfolder.name
-                                    isEditing = true
-                                } label: {
-                                    Label("Renombrar", systemImage: "pencil")
-                                }
-                                Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
-                                    Label("Favorito", systemImage: "star")
-                                }
-                                Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath) } label: {
-                                    Label("Eliminar", systemImage: "trash")
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
+                    .frame(width: 100, height: 80)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(10)
                 }
                 
-                if hasItems {
-                    Text("Items").font(.headline).padding(.horizontal)
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
-                        ForEach(sortedItems, id: \.id) { item in
-                            let itemPath = buildFullPath(item.name)
-                            gridItemCell(item)
-                                .contextMenu {
-                                    Button {
-                                        editingId = item.id
-                                        editingName = item.name
-                                        isEditing = true
-                                    } label: {
-                                        Label("Renombrar", systemImage: "pencil")
-                                    }
-                                    Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
-                                        Label("Favorito", systemImage: "star")
-                                    }
-                                    Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
-                                        Label("Eliminar", systemImage: "trash")
-                                    }
-                                    Menu {
-                                        Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
-                                            Label("Tomar foto", systemImage: "camera.fill")
-                                        }
-                                        Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
-                                            Label("Seleccionar de galería", systemImage: "photo.fill")
-                                        }
-                                        if item.imageData != nil {
-                                            Divider()
-                                            Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
-                                                Label("Eliminar imagen", systemImage: "trash")
-                                            }
-                                        }
-                                    } label: {
-                                        Label("Editar imagen", systemImage: "photo")
-                                    }
-                                }
-                        }
+                Button(action: { showingNewItemSheet = true }) {
+                    VStack {
+                        Image(systemName: "doc.badge.plus")
+                            .font(.title2)
+                        Text("Item")
+                            .font(.caption)
                     }
-                    .padding(.horizontal)
+                    .frame(width: 100, height: 80)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(10)
                 }
-                
-                if !hasSubfolders && !hasItems {
-                    Text("Vacío").foregroundColor(.gray).frame(maxWidth: .infinity, alignment: .center)
-                }
-            }
-            .padding(.vertical)
-        }
-    }
-    
-    @ViewBuilder
-    private var galleryView: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(spacing: 20) {
-                if hasSubfolders {
-                    ForEach(sortedSubfolders, id: \.id) { subfolder in
-                        let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-                        NavigationLink(destination: FolderDetailView(folder: FolderWrapper(subfolder), folderPath: folderPath + [idx], viewModel: viewModel)) {
-                            galleryFolderCell(subfolder)
-                        }
-                        .contextMenu {
-                            Button {
-                                editingId = subfolder.id
-                                editingName = subfolder.name
-                                isEditing = true
-                            } label: {
-                                Label("Renombrar", systemImage: "pencil")
-                            }
-                            Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
-                                Label("Favorito", systemImage: "star")
-                            }
-                            Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath) } label: {
-                                Label("Eliminar", systemImage: "trash")
-                            }
-                        }
-                    }
-                }
-                
-                if hasItems {
-                    ForEach(sortedItems, id: \.id) { item in
-                        let itemPath = buildFullPath(item.name)
-                        galleryItemCell(item)
-                            .contextMenu {
-                                Button {
-                                    editingId = item.id
-                                    editingName = item.name
-                                    isEditing = true
-                                } label: {
-                                    Label("Renombrar", systemImage: "pencil")
-                                }
-                                Button { viewModel.toggleFavorite(item: item, path: itemPath) } label: {
-                                    Label("Favorito", systemImage: "star")
-                                }
-                                Button(role: .destructive) { viewModel.deleteItem(id: item.id, from: folderPath) } label: {
-                                    Label("Eliminar", systemImage: "trash")
-                                }
-                                Menu {
-                                    Button(action: { selectedItemForImage = item; imageSourceType = .camera; showingImagePicker = true }) {
-                                        Label("Tomar foto", systemImage: "camera.fill")
-                                    }
-                                    Button(action: { selectedItemForImage = item; imageSourceType = .photoLibrary; showingImagePicker = true }) {
-                                        Label("Seleccionar de galería", systemImage: "photo.fill")
-                                    }
-                                    if item.imageData != nil {
-                                        Divider()
-                                        Button(role: .destructive, action: { viewModel.updateItemImage(imageData: nil, itemId: item.id) }) {
-                                            Label("Eliminar imagen", systemImage: "trash")
-                                        }
-                                    }
-                                } label: {
-                                    Label("Editar imagen", systemImage: "photo")
-                                }
-                            }
-                    }
-                }
-                
-                if !hasSubfolders && !hasItems {
-                    Text("Vacío").foregroundColor(.gray).frame(maxHeight: .infinity, alignment: .center)
-                }
-            }
-            .padding()
-        }
-    }
-    
-    @ViewBuilder
-    private func gridFolderCell(_ folder: Folder) -> some View {
-        VStack(spacing: 8) {
-            ZStack {
-                if let imageData = folder.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(minWidth: 0, maxWidth: .infinity)
-                        .frame(height: 120)
-                        .clipped()
-                } else {
-                    LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .frame(height: 120)
-                        .overlay(Image(systemName: "folder.fill").font(.system(size: 32)).foregroundColor(.blue))
-                }
-            }
-            .frame(height: 120)
-            .cornerRadius(8)
-            
-            if editingId == folder.id {
-                TextField("Nombre", text: $editingName)
-                    .focused($isEditing)
-                    .onSubmit {
-                        viewModel.renameFolder(id: folder.id, newName: editingName)
-                        editingId = nil
-                    }
-                    .font(.caption).fontWeight(.semibold)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            } else {
-                Text(folder.name).font(.caption).fontWeight(.semibold).lineLimit(2)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func gridItemCell(_ item: Item) -> some View {
-        VStack(spacing: 8) {
-            ZStack {
-                if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(minWidth: 0, maxWidth: .infinity)
-                        .frame(height: 120)
-                        .clipped()
-                } else {
-                    LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                        .frame(height: 120)
-                        .overlay(Image(systemName: "doc.fill").font(.system(size: 32)).foregroundColor(.gray))
-                }
-            }
-            .frame(height: 120)
-            .cornerRadius(8)
-            
-            if editingId == item.id {
-                TextField("Nombre", text: $editingName)
-                    .focused($isEditing)
-                    .onSubmit {
-                        viewModel.renameItem(id: item.id, newName: editingName)
-                        editingId = nil
-                    }
-                    .font(.caption).fontWeight(.semibold)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-            } else {
-                Text(item.name).font(.caption).fontWeight(.semibold).lineLimit(2)
-            }
-        }
-    }
-    
-    @ViewBuilder
-    private func galleryFolderCell(_ folder: Folder) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if let imageData = folder.imageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    .frame(height: 300)
-                    .clipped()
-            } else {
-                LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .frame(height: 300)
-                    .overlay(Image(systemName: "folder.fill").font(.system(size: 48)).foregroundColor(.blue))
             }
             
-            LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
-                .frame(height: 100)
-            
-            HStack {
-                if editingId == folder.id {
-                    TextField("Nombre", text: $editingName)
-                        .focused($isEditing)
-                        .onSubmit {
-                            viewModel.renameFolder(id: folder.id, newName: editingName)
-                            editingId = nil
-                        }
-                        .font(.headline).fontWeight(.bold).foregroundColor(.white)
-                } else {
-                    Text(folder.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
-                }
-                Spacer()
-            }
-            .padding(12)
+            Spacer()
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .cornerRadius(12)
     }
-    
-    @ViewBuilder
-    private func galleryItemCell(_ item: Item) -> some View {
-        ZStack(alignment: .bottomLeading) {
-            if let imageData = item.imageData, let uiImage = UIImage(data: imageData) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(minWidth: 0, maxWidth: .infinity)
-                    .frame(height: 300)
-                    .clipped()
-            } else {
-                LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
-                    .frame(height: 300)
-                    .overlay(Image(systemName: "doc.fill").font(.system(size: 48)).foregroundColor(.gray))
-            }
-            
-            LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
-                .frame(height: 100)
-            
-            HStack {
-                if editingId == item.id {
-                    TextField("Nombre", text: $editingName)
-                        .focused($isEditing)
-                        .onSubmit {
-                            viewModel.renameItem(id: item.id, newName: editingName)
-                            editingId = nil
-                        }
-                        .font(.headline).fontWeight(.bold).foregroundColor(.white)
-                } else {
-                    Text(item.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
-                }
-                Spacer()
-            }
-            .padding(12)
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 300)
-        .cornerRadius(12)
-    }
-    
-    private func buildFullPath(_ itemName: String) -> String {
-        var pathComponents: [String] = []
-        
-        if !folderPath.isEmpty {
-            var currentFolder = viewModel.folders[folderPath[0]]
-            pathComponents.append(currentFolder.name)
-            
-            for i in 1..<folderPath.count {
-                if folderPath[i] < currentFolder.subfolders.count {
-                    currentFolder = currentFolder.subfolders[folderPath[i]]
-                    pathComponents.append(currentFolder.name)
-                }
-            }
-        }
-        
-        pathComponents.append(itemName)
-        return pathComponents.joined(separator: " > ")
-    }
-    
-    private func randomizeFolder() {
+
+    private func randomize() {
         viewModel.cleanOldHistory()
-        selectedResult = viewModel.randomizeFolder(at: folderPath)
+        if !folder.folder.items.isEmpty || !folder.folder.subfolders.isEmpty {
+            selectedResult = viewModel.randomizeFolder(at: folderPath)
+        }
         if selectedResult != nil { showingResult = true }
     }
 }
@@ -715,3 +373,4 @@ class FolderWrapper: ObservableObject {
     @Published var folder: Folder
     init(_ folder: Folder) { self.folder = folder }
 }
+

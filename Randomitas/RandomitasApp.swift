@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña  on 13/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 
 @main
 struct RandomitasApp: App {

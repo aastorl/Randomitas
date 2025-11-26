@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña  on 18/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 
 struct ImageEditorMenu: View {
     @Binding var imageData: Data?

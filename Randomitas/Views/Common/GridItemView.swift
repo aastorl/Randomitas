@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña on 21/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 
 struct GridItemView: View {
     let item: Item

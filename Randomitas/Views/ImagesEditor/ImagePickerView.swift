@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña  on 18/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 import PhotosUI
 
 struct ImagePickerView: UIViewControllerRepresentable {
@@ -15,13 +15,23 @@ struct ImagePickerView: UIViewControllerRepresentable {
     
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = sourceType
+        if UIImagePickerController.isSourceTypeAvailable(sourceType) {
+            picker.sourceType = sourceType
+        } else {
+            // Fallback to photo library if camera is not available (e.g. simulator)
+            picker.sourceType = .photoLibrary
+        }
         picker.delegate = context.coordinator
         picker.allowsEditing = false
         return picker
     }
     
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {
+        // Although we force recreation with .id(), it's good practice to try updating if possible
+        if uiViewController.sourceType != sourceType && UIImagePickerController.isSourceTypeAvailable(sourceType) {
+            uiViewController.sourceType = sourceType
+        }
+    }
     
     func makeCoordinator() -> Coordinator {
         Coordinator(onImagePicked: onImagePicked, dismiss: dismiss)

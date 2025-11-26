@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña  on 14/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 
 struct FavoriteDestination: Identifiable, Hashable {
     let id = UUID()
@@ -52,7 +52,7 @@ struct FavoritesSheet: View {
                             }
                         }
                         .onDelete { indices in
-                            viewModel.folderFavorites.remove(atOffsets: indices)
+                            viewModel.removeFolderFavorites(at: indices)
                         }
                     }
                 }
@@ -75,7 +75,7 @@ struct FavoritesSheet: View {
                             }
                         }
                         .onDelete { indices in
-                            viewModel.favorites.remove(atOffsets: indices)
+                            viewModel.removeFavorites(at: indices)
                         }
                     }
                 }

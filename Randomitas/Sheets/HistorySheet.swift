@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña  on 14/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 
 struct HistorySheet: View {
     @ObservedObject var viewModel: RandomitasViewModel

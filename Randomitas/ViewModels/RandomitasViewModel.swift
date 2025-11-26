@@ -8,6 +8,7 @@
 import Foundation
 import CoreData
 internal import Combine
+internal import SwiftUI
 
 class RandomitasViewModel: ObservableObject {
     @Published var folders: [Folder] = []
@@ -141,13 +142,27 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // MARK: - Folders
-    func addRootFolder(name: String) {
+    func addRootFolder(name: String, isFavorite: Bool = false, imageData: Data? = nil) {
         let folder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
         folder.id = UUID()
         folder.name = name
+        folder.imageData = imageData
+        
         coreDataStack.save()
-        coreDataStack.refresh()
-        loadFolders()
+        
+        if isFavorite {
+            // Para carpetas raíz, el path es simplemente el índice en el array de folders.
+            // Pero necesitamos recargar folders primero para saber el índice.
+            coreDataStack.refresh()
+            loadFolders()
+            
+            if let index = folders.firstIndex(where: { $0.id == folder.id }) {
+                toggleFolderFavorite(folder: folders[index], path: [index])
+            }
+        } else {
+            coreDataStack.refresh()
+            loadFolders()
+        }
     }
     
     func deleteRootFolder(id: UUID) {
@@ -165,7 +180,7 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // MARK: - Subfolders
-    func addSubfolder(name: String, to folderPath: [Int]) {
+    func addSubfolder(name: String, to folderPath: [Int], isFavorite: Bool = false, imageData: Data? = nil) {
         guard let parent = getFolderEntity(at: folderPath) else {
             print("❌ No se encontró carpeta padre")
             return
@@ -176,11 +191,31 @@ class RandomitasViewModel: ObservableObject {
         subfolder.id = UUID()
         subfolder.name = name
         subfolder.parent = parent
+        subfolder.imageData = imageData
         
         print("✅ Parent asignado: \(parent.name ?? "")")
         coreDataStack.save()
-        coreDataStack.refresh()
-        loadFolders()
+        
+        if isFavorite {
+            coreDataStack.refresh()
+            loadFolders()
+            
+            // Reconstruir el path para la nueva subcarpeta
+            // Esto es complejo porque necesitamos encontrar el índice de la nueva subcarpeta
+            if let parentFolder = getFolderAtPath(folderPath) {
+                if let subIndex = parentFolder.subfolders.firstIndex(where: { $0.id == subfolder.id }) {
+                    var newPath = folderPath
+                    newPath.append(subIndex)
+                    // Necesitamos pasar el objeto Folder struct, no la entidad
+                    if let newFolder = getFolderAtPath(newPath) {
+                        toggleFolderFavorite(folder: newFolder, path: newPath)
+                    }
+                }
+            }
+        } else {
+            coreDataStack.refresh()
+            loadFolders()
+        }
     }
     
     func deleteSubfolder(id: UUID, from folderPath: [Int]) {
@@ -199,7 +234,7 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // MARK: - Items
-    func addItem(name: String, to folderPath: [Int]) {
+    func addItem(name: String, to folderPath: [Int], isFavorite: Bool = false, imageData: Data? = nil) {
         guard let folder = getFolderEntity(at: folderPath) else {
             print("❌ No se encontró la carpeta para agregar el item")
             return
@@ -207,11 +242,49 @@ class RandomitasViewModel: ObservableObject {
         let item = NSEntityDescription.insertNewObject(forEntityName: "ItemEntity", into: coreDataStack.context) as! ItemEntity
         item.id = UUID()
         item.name = name
-        item.isFavorite = false
+        item.isFavorite = isFavorite
         item.folder = folder
+        item.imageData = imageData
+        
         coreDataStack.save()
-        coreDataStack.refresh()
-        loadFolders()
+        
+        if isFavorite {
+            // Construir el path string
+            // Necesitamos los nombres de las carpetas en el path
+            if let folderStruct = getFolderAtPath(folderPath) {
+                // Esta lógica es un poco inversa, necesitamos el path string completo
+                // "Carpeta > Subcarpeta > Item"
+                // Podemos reconstruirlo desde folderPath
+                var pathNames: [String] = []
+                var currentPath: [Int] = []
+                
+                for index in folderPath {
+                    currentPath.append(index)
+                    if let f = getFolderAtPath(currentPath) {
+                        pathNames.append(f.name)
+                    }
+                }
+                
+                let pathString = pathNames.joined(separator: " > ") + " > " + name
+                
+                // Agregar a favoritos manualmente porque toggleFavorite invierte el estado
+                // y aquí sabemos que queremos agregarlo.
+                // Pero toggleFavorite verifica si ya existe.
+                // Como acabamos de crear el item, seguro no está en la lista de favoritos del VM,
+                // pero ItemEntity.isFavorite ya es true.
+                // El VM.favorites es una lista separada de tuplas (ItemReference, String).
+                
+                // Llamamos a toggleFavorite pasando un Item struct temporal
+                let itemStruct = Item(id: item.id!, name: name, imageData: imageData, isFavorite: true)
+                toggleFavorite(item: itemStruct, path: pathString)
+            }
+            
+            coreDataStack.refresh()
+            loadFolders()
+        } else {
+            coreDataStack.refresh()
+            loadFolders()
+        }
     }
     
     func deleteItem(id: UUID, from folderPath: [Int]) {
@@ -227,6 +300,11 @@ class RandomitasViewModel: ObservableObject {
         } catch {
             print("Error: \(error)")
         }
+    }
+    
+    func findItem(id: UUID, in folderPath: [Int]) -> Item? {
+        guard let folder = getFolderAtPath(folderPath) else { return nil }
+        return folder.items.first { $0.id == id }
     }
     
     private func getFolderEntity(at indices: [Int]) -> FolderEntity? {
@@ -376,6 +454,14 @@ class RandomitasViewModel: ObservableObject {
     func isFavorite(itemId: UUID, path: String) -> Bool {
         favorites.contains { $0.0.id == itemId && $0.1 == path }
     }
+
+    func removeFavorites(at offsets: IndexSet) {
+        offsets.forEach { index in
+            let (itemRef, path) = favorites[index]
+            deleteFavorite(id: itemRef.id, path: path)
+        }
+        favorites.remove(atOffsets: offsets)
+    }
     
     // MARK: - Folder Favorites
     func toggleFolderFavorite(folder: Folder, path: [Int]) {
@@ -415,6 +501,14 @@ class RandomitasViewModel: ObservableObject {
     
     func isFolderFavorite(folderId: UUID) -> Bool {
         folderFavorites.contains { $0.0.id == folderId }
+    }
+
+    func removeFolderFavorites(at offsets: IndexSet) {
+        offsets.forEach { index in
+            let (folderRef, _) = folderFavorites[index]
+            deleteFolderFavorite(id: folderRef.id)
+        }
+        folderFavorites.remove(atOffsets: offsets)
     }
     
     // MARK: - History
@@ -568,6 +662,118 @@ class RandomitasViewModel: ObservableObject {
         let key = "view_\(folderId.uuidString)"
         userDefaults.set(viewType.rawValue, forKey: key)
         print("💾 Vista guardada para carpeta: \(viewType.rawValue)")
+    }
+    
+    // MARK: - Move & Copy
+    func moveItem(id: UUID, to targetFolderPath: [Int]) {
+        guard let targetFolder = getFolderEntity(at: targetFolderPath) else { return }
+        
+        let request = NSFetchRequest<ItemEntity>(entityName: "ItemEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let item = try coreDataStack.context.fetch(request).first {
+                item.folder = targetFolder
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+            }
+        } catch {
+            print("Error moving item: \(error)")
+        }
+    }
+    
+    func copyItem(id: UUID, to targetFolderPath: [Int]) {
+        guard let targetFolder = getFolderEntity(at: targetFolderPath) else { return }
+        
+        let request = NSFetchRequest<ItemEntity>(entityName: "ItemEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let originalItem = try coreDataStack.context.fetch(request).first {
+                let newItem = NSEntityDescription.insertNewObject(forEntityName: "ItemEntity", into: coreDataStack.context) as! ItemEntity
+                newItem.id = UUID()
+                newItem.name = originalItem.name
+                newItem.imageData = originalItem.imageData
+                newItem.isFavorite = false
+                newItem.folder = targetFolder
+                
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+            }
+        } catch {
+            print("Error copying item: \(error)")
+        }
+    }
+    
+    func moveFolder(id: UUID, to targetFolderPath: [Int]) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let folder = try coreDataStack.context.fetch(request).first {
+                if targetFolderPath.isEmpty {
+                    folder.parent = nil
+                } else {
+                    if let targetFolder = getFolderEntity(at: targetFolderPath) {
+                        folder.parent = targetFolder
+                    }
+                }
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+            }
+        } catch {
+            print("Error moving folder: \(error)")
+        }
+    }
+    
+    func copyFolder(id: UUID, to targetFolderPath: [Int]) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let originalFolder = try coreDataStack.context.fetch(request).first {
+                var targetParent: FolderEntity? = nil
+                if !targetFolderPath.isEmpty {
+                    targetParent = getFolderEntity(at: targetFolderPath)
+                }
+                
+                copyFolderRecursive(original: originalFolder, parent: targetParent)
+                
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+            }
+        } catch {
+            print("Error copying folder: \(error)")
+        }
+    }
+    
+    private func copyFolderRecursive(original: FolderEntity, parent: FolderEntity?) {
+        let newFolder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
+        newFolder.id = UUID()
+        newFolder.name = original.name
+        newFolder.imageData = original.imageData
+        newFolder.parent = parent
+        
+        if let items = original.items as? Set<ItemEntity> {
+            for item in items {
+                let newItem = NSEntityDescription.insertNewObject(forEntityName: "ItemEntity", into: coreDataStack.context) as! ItemEntity
+                newItem.id = UUID()
+                newItem.name = item.name
+                newItem.imageData = item.imageData
+                newItem.isFavorite = false
+                newItem.folder = newFolder
+            }
+        }
+        
+        if let subfolders = original.subfolders as? Set<FolderEntity> {
+            for sub in subfolders {
+                copyFolderRecursive(original: sub, parent: newFolder)
+            }
+        }
     }
 }
 

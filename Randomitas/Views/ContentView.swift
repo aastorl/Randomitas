@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña on 13/11/2025.
 //
 
-import SwiftUI
+internal import SwiftUI
 
 struct ContentView: View {
     @StateObject var viewModel = RandomitasViewModel()
@@ -19,10 +19,18 @@ struct ContentView: View {
     @State var showingImagePicker = false
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
     @State var selectedFolderId: UUID?
+    @State var showingMoveCopySheet = false
+    @State var moveCopyItem: Item?
+    @State var moveCopyFolder: Folder?
+    @State var moveCopyPath: [Int] = []
+    @State var isCopyOperation = false
     
     @State private var editingId: UUID?
     @State private var editingName: String = ""
     @FocusState private var isEditing: Bool
+    @State private var pickerID = UUID()
+    @State private var folderToDelete: UUID?
+    @State private var showLabel = false
     
     var sortedFolders: [Folder] {
         viewModel.sortFolders(viewModel.folders, by: currentSortType)
@@ -35,47 +43,37 @@ struct ContentView: View {
                 
                 VStack(spacing: 0) {
                     // TOOLBAR
-                    HStack(spacing: 12) {
-                        if !viewModel.folders.isEmpty {
-                            Button(action: randomize) {
-                                Image(systemName: "shuffle")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .frame(height: 44)
-                                    .frame(maxWidth: .infinity)
-                                    .background(Color.blue)
-                                    .cornerRadius(8)
+                    HStack(spacing: 25) {
+                        SortMenuView(sortType: $currentSortType)
+                            .foregroundColor(.blue)
+                            .font(.system(size: 18))
+                            .frame(maxWidth: .infinity)
+                        
+                        Menu {
+                            Picker("Vista", selection: $currentViewType) {
+                                Text("Lista").tag(RandomitasViewModel.ViewType.list)
+                                Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
+                                Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
                             }
+                        } label: {
+                            Image(systemName: "rectangle.grid.1x2")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 18))
+                                .frame(maxWidth: .infinity)
                         }
                         
-                        Spacer(minLength: 8)
-                        
-                        HStack(spacing: 10) {
-                            SortMenuView(sortType: $currentSortType)
+                        Button(action: { showingHistory = true }) {
+                            Image(systemName: "clock.fill")
                                 .foregroundColor(.blue)
-                            
-                            Menu {
-                                Picker("Vista", selection: $currentViewType) {
-                                    Text("Lista").tag(RandomitasViewModel.ViewType.list)
-                                    Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
-                                    Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
-                                }
-                            } label: {
-                                Image(systemName: "rectangle.grid.1x2")
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            Button(action: { showingNewFolderSheet = true }) {
-                                Image(systemName: "plus.circle.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.system(size: 18))
-                            }
-                            
-                            Button(action: { showingHistory = true }) {
-                                Image(systemName: "clock.fill")
-                                    .foregroundColor(.blue)
-                                    .font(.system(size: 16))
-                            }
+                                .font(.system(size: 18))
+                                .frame(maxWidth: .infinity)
+                        }
+                        
+                        Button(action: { showingNewFolderSheet = true }) {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.blue)
+                                .font(.system(size: 20))
+                                .frame(maxWidth: .infinity)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -103,18 +101,48 @@ struct ContentView: View {
                 // FLOATING BUTTON
                 VStack {
                     Spacer()
-                    HStack {
-                        Spacer()
+                    HStack(spacing: 16) {
+                        if !viewModel.folders.isEmpty {
+                            Button(action: randomize) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "shuffle")
+                                        .font(.system(size: 20, weight: .semibold))
+                                        .foregroundColor(.white)
+                                    
+                                    if showLabel {
+                                        Text(" Shuffle")
+                                            .font(.system(size: 18, weight: .semibold))
+                                            .foregroundColor(.white)
+                                            .transition(.move(edge: .leading).combined(with: .opacity))
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.leading, 20)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 56)
+                                .background(.blue)
+                                .cornerRadius(28)
+                                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                                .onAppear {
+                                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1)) {
+                                        showLabel = true
+                                    }
+                                }
+                            }
+                        }
+                        
                         Button(action: { showingFavorites = true }) {
                             Image(systemName: "star.fill")
                                 .font(.system(size: 20, weight: .semibold))
                                 .foregroundColor(.white)
                                 .frame(width: 56, height: 56)
-                                .background(Color.yellow)
+                                .background(.yellow)
                                 .clipShape(Circle())
+                                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
                         }
-                        .padding()
                     }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
                 }
             }
             .navigationTitle("Randomitas")
@@ -141,7 +169,29 @@ struct ContentView: View {
                             viewModel.updateFolderImage(imageData: data, at: [idx])
                         }
                     }, sourceType: imageSourceType)
+                    .id(pickerID)
                 }
+            }
+            .alert("¿Seguro quieres eliminar esta Carpeta?", isPresented: .constant(folderToDelete != nil)) {
+                Button("Cancelar", role: .cancel) {
+                    folderToDelete = nil
+                }
+                Button("Eliminar", role: .destructive) {
+                    if let id = folderToDelete {
+                        viewModel.deleteRootFolder(id: id)
+                        folderToDelete = nil
+                    }
+                }
+            }
+            .sheet(isPresented: $showingMoveCopySheet) {
+                MoveCopySheet(
+                    viewModel: viewModel,
+                    isPresented: $showingMoveCopySheet,
+                    itemToMove: moveCopyItem,
+                    folderToMove: moveCopyFolder,
+                    currentPath: moveCopyPath,
+                    isCopy: isCopyOperation
+                )
             }
         }
     }
@@ -215,8 +265,13 @@ struct ContentView: View {
                     }
                 }
                 .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
+                    Button(role: .destructive) { folderToDelete = folder.id } label: {
                         Label("Eliminar", systemImage: "trash")
+                    }
+                }
+                .contextMenu {
+                    Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
+                        Label("Favorito", systemImage: "star")
                     }
                     Button {
                         editingId = folder.id
@@ -225,7 +280,27 @@ struct ContentView: View {
                     } label: {
                         Label("Renombrar", systemImage: "pencil")
                     }
-                    .tint(.orange)
+                    Button {
+                        moveCopyFolder = folder
+                        moveCopyItem = nil
+                        moveCopyPath = [idx]
+                        isCopyOperation = false
+                        showingMoveCopySheet = true
+                    } label: {
+                        Label("Mover", systemImage: "arrow.turn.up.right")
+                    }
+                    Button {
+                        moveCopyFolder = folder
+                        moveCopyItem = nil
+                        moveCopyPath = [idx]
+                        isCopyOperation = true
+                        showingMoveCopySheet = true
+                    } label: {
+                        Label("Copiar", systemImage: "doc.on.doc")
+                    }
+                    Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
+                        Label("Eliminar", systemImage: "trash")
+                    }
                 }
             }
         }
@@ -241,6 +316,9 @@ struct ContentView: View {
                         gridFolderCell(folder)
                     }
                     .contextMenu {
+                        Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
+                            Label("Favorito", systemImage: "star")
+                        }
                         Button {
                             editingId = folder.id
                             editingName = folder.name
@@ -248,8 +326,23 @@ struct ContentView: View {
                         } label: {
                             Label("Renombrar", systemImage: "pencil")
                         }
-                        Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
-                            Label("Favorito", systemImage: "star")
+                        Button {
+                            moveCopyFolder = folder
+                            moveCopyItem = nil
+                            moveCopyPath = [idx]
+                            isCopyOperation = false
+                            showingMoveCopySheet = true
+                        } label: {
+                            Label("Mover", systemImage: "arrow.turn.up.right")
+                        }
+                        Button {
+                            moveCopyFolder = folder
+                            moveCopyItem = nil
+                            moveCopyPath = [idx]
+                            isCopyOperation = true
+                            showingMoveCopySheet = true
+                        } label: {
+                            Label("Copiar", systemImage: "doc.on.doc")
                         }
                         Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
                             Label("Eliminar", systemImage: "trash")
@@ -271,6 +364,9 @@ struct ContentView: View {
                         galleryFolderCell(folder)
                     }
                     .contextMenu {
+                        Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
+                            Label("Favorito", systemImage: "star")
+                        }
                         Button {
                             editingId = folder.id
                             editingName = folder.name
@@ -278,8 +374,23 @@ struct ContentView: View {
                         } label: {
                             Label("Renombrar", systemImage: "pencil")
                         }
-                        Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
-                            Label("Favorito", systemImage: "star")
+                        Button {
+                            moveCopyFolder = folder
+                            moveCopyItem = nil
+                            moveCopyPath = [idx]
+                            isCopyOperation = false
+                            showingMoveCopySheet = true
+                        } label: {
+                            Label("Mover", systemImage: "arrow.turn.up.right")
+                        }
+                        Button {
+                            moveCopyFolder = folder
+                            moveCopyItem = nil
+                            moveCopyPath = [idx]
+                            isCopyOperation = true
+                            showingMoveCopySheet = true
+                        } label: {
+                            Label("Copiar", systemImage: "doc.on.doc")
                         }
                         Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
                             Label("Eliminar", systemImage: "trash")
