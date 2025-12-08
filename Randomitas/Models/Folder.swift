@@ -10,21 +10,24 @@ import Foundation
 struct Folder: Identifiable, Codable {
     let id: UUID
     var name: String
-    var items: [Item]
     var subfolders: [Folder]
     var imageData: Data?
+    var createdAt: Date
+    var isHidden: Bool
     
     init(
         id: UUID = UUID(),
         name: String,
-        items: [Item] = [],
         subfolders: [Folder] = [],
-        imageData: Data? = nil
+        imageData: Data? = nil,
+        createdAt: Date = Date(),
+        isHidden: Bool = false
     ) {
         self.id = id
         self.name = name
-        self.items = items
         self.subfolders = subfolders
         self.imageData = imageData
+        self.createdAt = createdAt
+        self.isHidden = isHidden
     }
 }

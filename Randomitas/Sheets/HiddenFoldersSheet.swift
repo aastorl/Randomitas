@@ -1,13 +1,13 @@
 //
-//  FavoritesSheet.swift
+//  HiddenFoldersSheet.swift
 //  Randomitas
 //
-//  Created by Astor Ludueña  on 14/11/2025.
+//  Created by Astor Ludueña on 05/12/2025.
 //
 
 internal import SwiftUI
 
-struct FavoriteDestination: Identifiable, Hashable {
+struct HiddenDestination: Identifiable, Hashable {
     let id = UUID()
     let path: [Int]
     
@@ -15,29 +15,29 @@ struct FavoriteDestination: Identifiable, Hashable {
         hasher.combine(id)
     }
     
-    static func == (lhs: FavoriteDestination, rhs: FavoriteDestination) -> Bool {
+    static func == (lhs: HiddenDestination, rhs: HiddenDestination) -> Bool {
         lhs.id == rhs.id
     }
 }
 
-struct FavoritesSheet: View {
+struct HiddenFoldersSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     @Binding var isPresented: Bool
-    @State var selectedDestination: FavoriteDestination?
+    @State var selectedDestination: HiddenDestination?
+    @State private var hiddenFolders: [(folder: Folder, path: [Int])] = []
     
     var body: some View {
         NavigationStack {
             List {
-                // Carpetas Favoritas
-                if !viewModel.folderFavorites.isEmpty {
-                    Section(header: Text("Carpetas")) {
-                        ForEach(viewModel.folderFavorites, id: \.0.id) { fav in
-                            NavigationLink(value: FavoriteDestination(path: fav.1)) {
+                if !hiddenFolders.isEmpty {
+                    Section(header: Text("Carpetas Ocultas")) {
+                        ForEach(Array(hiddenFolders.enumerated()), id: \.element.folder.id) { index, item in
+                            NavigationLink(value: HiddenDestination(path: item.path)) {
                                 HStack {
-                                    Image(systemName: "folder.fill")
-                                        .foregroundColor(.blue)
+                                    Image(systemName: "eye.slash")
+                                        .foregroundColor(.gray)
                                     VStack(alignment: .leading, spacing: 4) {
-                                        Text(fav.0.name)
+                                        Text(item.folder.name)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.primary)
                                     }
@@ -45,19 +45,20 @@ struct FavoritesSheet: View {
                             }
                         }
                         .onDelete { indices in
-                            viewModel.removeFolderFavorites(at: indices)
+                            viewModel.removeHiddenFolders(at: indices, from: hiddenFolders)
+                            hiddenFolders = viewModel.getHiddenFolders()
                         }
                     }
                 }
                 
-                if viewModel.folderFavorites.isEmpty {
-                    Text("Sin favoritos")
+                if hiddenFolders.isEmpty {
+                    Text("Sin carpetas ocultas")
                         .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Favoritos")
+            .navigationTitle("Carpetas Ocultas")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: FavoriteDestination.self) { destination in
+            .navigationDestination(for: HiddenDestination.self) { destination in
                 if let folderView = buildFolderViewFromPath(destination.path) {
                     folderView
                 }
@@ -68,6 +69,9 @@ struct FavoritesSheet: View {
                         isPresented = false
                     }
                 }
+            }
+            .onAppear {
+                hiddenFolders = viewModel.getHiddenFolders()
             }
         }
     }

@@ -10,20 +10,15 @@ internal import SwiftUI
 struct ContentView: View {
     @StateObject var viewModel = RandomitasViewModel()
     @State var showingNewFolderSheet = false
-    @State var showingResult = false
-    @State var selectedResult: (item: Item, path: String)?
     @State var showingFavorites = false
     @State var showingHistory = false
+    @State var showingHiddenFolders = false
     @State var currentViewType: RandomitasViewModel.ViewType = .list
     @State var currentSortType: RandomitasViewModel.SortType = .nameAsc
     @State var showingImagePicker = false
     @State var imageSourceType: UIImagePickerController.SourceType = .photoLibrary
     @State var selectedFolderId: UUID?
-    @State var showingMoveCopySheet = false
-    @State var moveCopyItem: Item?
-    @State var moveCopyFolder: Folder?
-    @State var moveCopyPath: [Int] = []
-    @State var isCopyOperation = false
+    @State var moveCopyOperation: MoveCopyOperation?
     
     @State private var editingId: UUID?
     @State private var editingName: String = ""
@@ -31,6 +26,16 @@ struct ContentView: View {
     @State private var pickerID = UUID()
     @State private var folderToDelete: UUID?
     @State private var showLabel = false
+    
+    // Search State
+    @State private var isSearching = false
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
+    
+    // Folder Result State
+    @State private var selectedFolderResult: (folder: Folder, path: [Int])?
+    @State private var showingFolderResult = false
+    @State private var navigationToFolder: [Int]?
     
     var sortedFolders: [Folder] {
         viewModel.sortFolders(viewModel.folders, by: currentSortType)
@@ -43,123 +48,78 @@ struct ContentView: View {
                 
                 VStack(spacing: 0) {
                     // TOOLBAR
-                    HStack(spacing: 25) {
-                        SortMenuView(sortType: $currentSortType)
-                            .foregroundColor(.blue)
-                            .font(.system(size: 18))
-                            .frame(maxWidth: .infinity)
-                        
-                        Menu {
-                            Picker("Vista", selection: $currentViewType) {
-                                Text("Lista").tag(RandomitasViewModel.ViewType.list)
-                                Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
-                                Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
-                            }
-                        } label: {
-                            Image(systemName: "rectangle.grid.1x2")
-                                .foregroundColor(.blue)
-                                .font(.system(size: 18))
-                                .frame(maxWidth: .infinity)
-                        }
-                        
-                        Button(action: { showingHistory = true }) {
-                            Image(systemName: "clock.fill")
-                                .foregroundColor(.blue)
-                                .font(.system(size: 18))
-                                .frame(maxWidth: .infinity)
-                        }
-                        
-                        Button(action: { showingNewFolderSheet = true }) {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.blue)
-                                .font(.system(size: 20))
-                                .frame(maxWidth: .infinity)
-                        }
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .background(Color(.systemBackground))
-                    .border(Color(.systemGray5), width: 1)
+                    toolbarView
                     
                     // CONTENT
                     Group {
                         if viewModel.folders.isEmpty {
                             emptyState
                         } else {
-                            switch currentViewType {
-                            case .list:
-                                listView
-                            case .grid:
-                                gridView
-                            case .gallery:
-                                galleryView
-                            }
+                            mainContentView
                         }
                     }
                 }
                 
-                // FLOATING BUTTON
-                VStack {
-                    Spacer()
-                    HStack(spacing: 16) {
-                        if !viewModel.folders.isEmpty {
-                            Button(action: randomize) {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "shuffle")
-                                        .font(.system(size: 20, weight: .semibold))
-                                        .foregroundColor(.white)
-                                    
-                                    if showLabel {
-                                        Text(" Shuffle")
-                                            .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(.white)
-                                            .transition(.move(edge: .leading).combined(with: .opacity))
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.leading, 20)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 56)
-                                .background(.blue)
-                                .cornerRadius(28)
-                                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
-                                .onAppear {
-                                    withAnimation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1)) {
-                                        showLabel = true
-                                    }
-                                }
-                            }
-                        }
-                        
-                        Button(action: { showingFavorites = true }) {
-                            Image(systemName: "star.fill")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(width: 56, height: 56)
-                                .background(.yellow)
-                                .clipShape(Circle())
-                                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
-                        }
+                // BOTTOM BAR
+                bottomBarView
+                
+                // Search Results Overlay
+                if isSearching && !searchText.isEmpty {
+                    searchResultsView
+                }
+                
+                // Programmatic navigation to folder from ResultSheet
+                if let navPath = navigationToFolder, let folderView = buildFolderViewFromPath(navPath) {
+                    NavigationLink(destination: folderView, isActive: .constant(true)) {
+                        EmptyView()
                     }
-                    .padding(.horizontal)
-                    .padding(.bottom, 8)
+                    .hidden()
+                    .onAppear {
+                        navigationToFolder = nil
+                    }
                 }
             }
             .navigationTitle("Randomitas")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        withAnimation(.spring()) {
+                            isSearching = true
+                            isSearchFocused = true
+                        }
+                    }) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.blue)
+                    }
+                }
+            }
             .sheet(isPresented: $showingNewFolderSheet) {
                 NewFolderSheet(viewModel: viewModel, isPresented: $showingNewFolderSheet)
             }
-            .sheet(isPresented: $showingResult) {
-                if let result = selectedResult {
-                    ResultSheet(item: result.item, path: result.path, isPresented: $showingResult, viewModel: viewModel, folderPath: [])
+            .sheet(isPresented: $showingFolderResult) {
+                if let folderResult = selectedFolderResult {
+                    ResultSheet(folder: folderResult.folder, path: folderResult.path, isPresented: $showingFolderResult, viewModel: viewModel, navigationPath: $navigationToFolder)
                 }
             }
             .sheet(isPresented: $showingFavorites) {
                 FavoritesSheet(viewModel: viewModel, isPresented: $showingFavorites)
             }
+            .navigationDestination(for: FavoriteDestination.self) { destination in
+                if let folderView = buildFolderViewFromPath(destination.path) {
+                    folderView
+                }
+            }
             .sheet(isPresented: $showingHistory) {
                 HistorySheet(viewModel: viewModel, isPresented: $showingHistory)
+            }
+            .sheet(isPresented: $showingHiddenFolders) {
+                HiddenFoldersSheet(viewModel: viewModel, isPresented: $showingHiddenFolders)
+            }
+            .navigationDestination(for: HiddenDestination.self) { destination in
+                if let folderView = buildFolderViewFromPath(destination.path) {
+                    folderView
+                }
             }
             .sheet(isPresented: $showingImagePicker) {
                 if let folderId = selectedFolderId, let idx = viewModel.folders.firstIndex(where: { $0.id == folderId }) {
@@ -183,17 +143,216 @@ struct ContentView: View {
                     }
                 }
             }
-            .sheet(isPresented: $showingMoveCopySheet) {
+            .sheet(item: $moveCopyOperation) { operation in
                 MoveCopySheet(
                     viewModel: viewModel,
-                    isPresented: $showingMoveCopySheet,
-                    itemToMove: moveCopyItem,
-                    folderToMove: moveCopyFolder,
-                    currentPath: moveCopyPath,
-                    isCopy: isCopyOperation
+                    isPresented: Binding(
+                        get: { moveCopyOperation != nil },
+                        set: { if !$0 { moveCopyOperation = nil } }
+                    ),
+                    folderToMove: operation.folder,
+                    currentPath: operation.sourcePath,
+                    isCopy: operation.isCopy
                 )
             }
         }
+    }
+    
+    // MARK: - Subviews
+    
+    @ViewBuilder
+    private var toolbarView: some View {
+        HStack(spacing: 25) {
+            SortMenuView(sortType: $currentSortType)
+                .foregroundColor(.blue)
+                .font(.system(size: 18))
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+            
+            Menu {
+                Picker("Vista", selection: $currentViewType) {
+                    Text("Lista").tag(RandomitasViewModel.ViewType.list)
+                    Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
+                    Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
+                }
+            } label: {
+                Image(systemName: "rectangle.grid.1x2")
+                    .foregroundColor(.blue)
+                    .font(.system(size: 18))
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+            }
+            
+            Button(action: { showingHistory = true }) {
+                Image(systemName: "clock.fill")
+                    .foregroundColor(.blue)
+                    .font(.system(size: 18))
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+            }
+            
+            Button(action: { showingNewFolderSheet = true }) {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundColor(.blue)
+                    .font(.system(size: 20))
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color(.systemBackground))
+        .border(Color(.systemGray5), width: 1)
+    }
+    
+    @ViewBuilder
+    private var mainContentView: some View {
+        switch currentViewType {
+        case .list:
+            listView
+        case .grid:
+            gridView
+        case .gallery:
+            galleryView
+        }
+    }
+    
+    @ViewBuilder
+    private var bottomBarView: some View {
+        VStack {
+            Spacer()
+            
+            if isSearching {
+                // SEARCH BAR MODE
+                HStack {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.gray)
+                        TextField("Buscar items y carpetas...", text: $searchText)
+                            .focused($isSearchFocused)
+                            .submitLabel(.search)
+                            .onSubmit {
+                                // Optional: Action on submit
+                            }
+                        
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.gray)
+                            }
+                        }
+                    }
+                    .padding(12)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
+                    
+                    Button("Cancelar") {
+                        withAnimation(.spring()) {
+                            isSearching = false
+                            searchText = ""
+                            isSearchFocused = false
+                        }
+                    }
+                    .foregroundColor(.blue)
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: -2)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                // NORMAL MODE
+                HStack(spacing: 16) {
+                    // Hidden Folders Button
+                    Button(action: { showingHiddenFolders = true }) {
+                        Image(systemName: "eye.slash")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(uiColor: .systemBackground))
+                            .frame(width: 56, height: 56)
+                            .background(Color.primary)
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                    }
+                    
+                    // Shuffle Button (Center Pill)
+                    if !viewModel.folders.isEmpty {
+                        Menu {
+                            Button(action: randomizeCurrentScreen) {
+                                Label("Randomizar esta pantalla", systemImage: "square.dashed")
+                            }
+                            Button(action: randomizeWithChildren) {
+                                Label("Randomizar esta pantalla + hijos", systemImage: "square.stack.3d.down.right")
+                            }
+                            Button(action: randomizeAll) {
+                                Label("Randomizar todo", systemImage: "shuffle")
+                            }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "shuffle")
+                                    .font(.system(size: 20, weight: .semibold))
+                                Text("Shuffle")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                            .background(Color.primary)
+                            .foregroundColor(Color(uiColor: .systemBackground))
+                            .clipShape(Capsule())
+                            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                        }
+                    }
+                    
+                    // Favorites Button
+                    Button(action: { showingFavorites = true }) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(uiColor: .systemBackground))
+                            .frame(width: 56, height: 56)
+                            .background(Color.primary)
+                            .clipShape(Circle())
+                            .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 0)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var searchResultsView: some View {
+        VStack(spacing: 0) {
+            // Header background to cover navigation bar area
+            Color(.systemBackground)
+                .frame(height: 1) // Minimal height, just to set background
+                .ignoresSafeArea()
+            
+            List {
+                let results = viewModel.search(query: searchText)
+                if !results.isEmpty {
+                    Section(header: Text("Carpetas")) {
+                        ForEach(results, id: \.0.id) { folder, path in
+                            NavigationLink(value: FavoriteDestination(path: path)) {
+                                HStack {
+                                    Image(systemName: "folder.fill")
+                                        .foregroundColor(.blue)
+                                    Text(folder.name)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text("No se encontraron resultados")
+                    .foregroundColor(.gray)
+                }
+            }
+            .listStyle(.plain)
+            .background(Color(.systemBackground))
+        }
+        .background(Color(.systemBackground))
+        .padding(.bottom, 80) // Keep space for bottom bar
+        .zIndex(1)
+        .transition(.opacity)
     }
     
     @ViewBuilder
@@ -234,7 +393,12 @@ struct ContentView: View {
         List {
             ForEach(sortedFolders, id: \.id) { folder in
                 let idx = viewModel.folders.firstIndex(where: { $0.id == folder.id }) ?? 0
-                NavigationLink(destination: FolderDetailView(folder: FolderWrapper(folder), folderPath: [idx], viewModel: viewModel)) {
+                ZStack(alignment: .leading) {
+                    NavigationLink(destination: FolderDetailView(folder: FolderWrapper(folder), folderPath: [idx], viewModel: viewModel)) {
+                        EmptyView()
+                    }
+                    .opacity(0)
+                    
                     HStack(spacing: 12) {
                         if let imageData = folder.imageData, let uiImage = UIImage(data: imageData) {
                             Image(uiImage: uiImage)
@@ -259,9 +423,26 @@ struct ContentView: View {
                         } else {
                             Text(folder.name)
                         }
+                        
+                        // Icono para carpetas ocultas
+                        if folder.isHidden {
+                            Image(systemName: "eye.slash")
+                                .foregroundColor(.gray)
+                                .font(.system(size: 14))
+                        }
+                        
                         Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.gray)
+                        
+                        // Indicador de navegación personalizado
+                        if folder.subfolders.isEmpty {
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(Color(.systemGray3))
+                                .font(.system(size: 14, weight: .semibold))
+                        } else {
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(Color(.systemGray3))
+                                .font(.system(size: 14, weight: .semibold))
+                        }
                     }
                 }
                 .swipeActions(edge: .trailing) {
@@ -271,7 +452,7 @@ struct ContentView: View {
                 }
                 .contextMenu {
                     Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
-                        Label("Favorito", systemImage: "star")
+                        Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: folder.id) ? "star.fill" : "star")
                     }
                     Button {
                         editingId = folder.id
@@ -281,22 +462,19 @@ struct ContentView: View {
                         Label("Renombrar", systemImage: "pencil")
                     }
                     Button {
-                        moveCopyFolder = folder
-                        moveCopyItem = nil
-                        moveCopyPath = [idx]
-                        isCopyOperation = false
-                        showingMoveCopySheet = true
+                        moveCopyOperation = MoveCopyOperation(folder: folder, sourcePath: [idx], isCopy: false)
                     } label: {
                         Label("Mover", systemImage: "arrow.turn.up.right")
                     }
                     Button {
-                        moveCopyFolder = folder
-                        moveCopyItem = nil
-                        moveCopyPath = [idx]
-                        isCopyOperation = true
-                        showingMoveCopySheet = true
+                        moveCopyOperation = MoveCopyOperation(folder: folder, sourcePath: [idx], isCopy: true)
                     } label: {
                         Label("Copiar", systemImage: "doc.on.doc")
+                    }
+                    Button {
+                        viewModel.toggleFolderHidden(folder: folder, path: [idx])
+                    } label: {
+                        Label(folder.isHidden ? "Mostrar" : "Ocultar", systemImage: folder.isHidden ? "eye" : "eye.slash")
                     }
                     Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
                         Label("Eliminar", systemImage: "trash")
@@ -317,7 +495,7 @@ struct ContentView: View {
                     }
                     .contextMenu {
                         Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
-                            Label("Favorito", systemImage: "star")
+                            Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: folder.id) ? "star.fill" : "star")
                         }
                         Button {
                             editingId = folder.id
@@ -327,20 +505,12 @@ struct ContentView: View {
                             Label("Renombrar", systemImage: "pencil")
                         }
                         Button {
-                            moveCopyFolder = folder
-                            moveCopyItem = nil
-                            moveCopyPath = [idx]
-                            isCopyOperation = false
-                            showingMoveCopySheet = true
+                            moveCopyOperation = MoveCopyOperation(folder: folder, sourcePath: [idx], isCopy: false)
                         } label: {
                             Label("Mover", systemImage: "arrow.turn.up.right")
                         }
                         Button {
-                            moveCopyFolder = folder
-                            moveCopyItem = nil
-                            moveCopyPath = [idx]
-                            isCopyOperation = true
-                            showingMoveCopySheet = true
+                            moveCopyOperation = MoveCopyOperation(folder: folder, sourcePath: [idx], isCopy: true)
                         } label: {
                             Label("Copiar", systemImage: "doc.on.doc")
                         }
@@ -365,7 +535,7 @@ struct ContentView: View {
                     }
                     .contextMenu {
                         Button { viewModel.toggleFolderFavorite(folder: folder, path: [idx]) } label: {
-                            Label("Favorito", systemImage: "star")
+                            Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: folder.id) ? "star.fill" : "star")
                         }
                         Button {
                             editingId = folder.id
@@ -375,22 +545,19 @@ struct ContentView: View {
                             Label("Renombrar", systemImage: "pencil")
                         }
                         Button {
-                            moveCopyFolder = folder
-                            moveCopyItem = nil
-                            moveCopyPath = [idx]
-                            isCopyOperation = false
-                            showingMoveCopySheet = true
+                            moveCopyOperation = MoveCopyOperation(folder: folder, sourcePath: [idx], isCopy: false)
                         } label: {
                             Label("Mover", systemImage: "arrow.turn.up.right")
                         }
                         Button {
-                            moveCopyFolder = folder
-                            moveCopyItem = nil
-                            moveCopyPath = [idx]
-                            isCopyOperation = true
-                            showingMoveCopySheet = true
+                            moveCopyOperation = MoveCopyOperation(folder: folder, sourcePath: [idx], isCopy: true)
                         } label: {
                             Label("Copiar", systemImage: "doc.on.doc")
+                        }
+                        Button {
+                            viewModel.toggleFolderHidden(folder: folder, path: [idx])
+                        } label: {
+                            Label(folder.isHidden ? "Mostrar" : "Ocultar", systemImage: folder.isHidden ? "eye" : "eye.slash")
                         }
                         Button(role: .destructive) { viewModel.deleteRootFolder(id: folder.id) } label: {
                             Label("Eliminar", systemImage: "trash")
@@ -418,9 +585,31 @@ struct ContentView: View {
                         .frame(height: 120)
                         .overlay(Image(systemName: "folder.fill").font(.system(size: 32)).foregroundColor(.blue))
                 }
+                
+                // Indicador de carpeta oculta (esquina superior derecha)
+                if folder.isHidden {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            Image(systemName: "eye.slash")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white)
+                                .padding(6)
+                                .background(Color.black.opacity(0.6))
+                                .clipShape(Circle())
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                }
             }
             .frame(height: 120)
-            .cornerRadius(8)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
             
             if editingId == folder.id {
                 TextField("Nombre", text: $editingName)
@@ -429,11 +618,15 @@ struct ContentView: View {
                         viewModel.renameFolder(id: folder.id, newName: editingName)
                         editingId = nil
                     }
-                    .font(.caption).fontWeight(.semibold)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             } else {
-                Text(folder.name).font(.caption).fontWeight(.semibold).lineLimit(2)
+                Text(folder.name)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.primary)
             }
         }
     }
@@ -454,6 +647,23 @@ struct ContentView: View {
                     .overlay(Image(systemName: "folder.fill").font(.system(size: 48)).foregroundColor(.blue))
             }
             
+            // Indicador de carpeta oculta (esquina superior derecha)
+            if folder.isHidden {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Image(systemName: "eye.slash")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white)
+                            .padding(8)
+                            .background(Color.black.opacity(0.6))
+                            .clipShape(Circle())
+                    }
+                    Spacer()
+                }
+                .padding(12)
+            }
+            
             LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
                 .frame(height: 100)
             
@@ -465,9 +675,11 @@ struct ContentView: View {
                             viewModel.renameFolder(id: folder.id, newName: editingName)
                             editingId = nil
                         }
-                        .font(.headline).fontWeight(.bold).foregroundColor(.white)
+                        .font(.system(size: 17, weight: .bold, design: .rounded)).foregroundColor(.white)
                 } else {
-                    Text(folder.name).font(.headline).fontWeight(.bold).foregroundColor(.white)
+                    Text(folder.name)
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
                 }
                 Spacer()
             }
@@ -475,16 +687,72 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity)
         .frame(height: 300)
-        .cornerRadius(12)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
     }
     
-    private func randomize() {
+    
+    private func randomizeCurrentScreen() {
         viewModel.cleanOldHistory()
-        if !viewModel.folders.isEmpty {
-            let randomIndex = Int.random(in: 0..<viewModel.folders.count)
-            selectedResult = viewModel.randomizeFolder(at: [randomIndex])
+        if let folderResult = viewModel.randomizeCurrentScreen(at: []) {
+            selectedFolderResult = folderResult
+            showingFolderResult = true
         }
-        if selectedResult != nil { showingResult = true }
+    }
+    
+    private func randomizeWithChildren() {
+        viewModel.cleanOldHistory()
+        if let folderResult = viewModel.randomizeWithChildren(at: []) {
+            selectedFolderResult = folderResult
+            showingFolderResult = true
+        }
+    }
+    
+    private func randomizeAll() {
+        viewModel.cleanOldHistory()
+        if let folderResult = viewModel.randomizeAll() {
+            selectedFolderResult = folderResult
+            showingFolderResult = true
+        }
+    }
+    
+    // MARK: - Helper Functions
+    private func buildFolderViewFromPath(_ path: [Int]) -> FolderDetailView? {
+        guard let folder = getFolderAtPath(path) else { return nil }
+        
+        return FolderDetailView(
+            folder: FolderWrapper(folder),
+            folderPath: path,
+            viewModel: viewModel
+        )
+    }
+    
+    private func buildFolderView(from pathString: String) -> FolderDetailView? {
+        guard let path = extractFolderPath(from: pathString) else { return nil }
+        return buildFolderViewFromPath(path)
+    }
+    
+    private func getFolderAtPath(_ indices: [Int]) -> Folder? {
+        guard !indices.isEmpty else { return nil }
+        guard indices[0] < viewModel.folders.count else { return nil }
+        
+        var current = viewModel.folders[indices[0]]
+        
+        for i in 1..<indices.count {
+            guard indices[i] < current.subfolders.count else { return nil }
+            current = current.subfolders[indices[i]]
+        }
+        
+        return current
+    }
+    
+    private func extractFolderPath(from pathString: String) -> [Int]? {
+        let components = pathString.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+        return components.compactMap { Int($0) }
     }
 }
 

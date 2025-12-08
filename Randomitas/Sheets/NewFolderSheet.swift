@@ -13,7 +13,7 @@ struct NewFolderSheet: View {
     @Binding var isPresented: Bool
     @State var name: String = ""
     @State private var isFavorite: Bool = false
-    @State private var selectedItem: PhotosPickerItem?
+    @State private var imagePickerRequest: ImagePickerRequest?
     @State private var selectedImageData: Data?
     
     var body: some View {
@@ -29,7 +29,20 @@ struct NewFolderSheet: View {
                     .background(Color(.systemGray6))
                     .cornerRadius(8)
                 
-                PhotosPicker(selection: $selectedItem, matching: .images) {
+                Menu {
+                    Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                        Label("Tomar foto", systemImage: "camera.fill")
+                    }
+                    Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                        Label("Seleccionar de galería", systemImage: "photo.fill")
+                    }
+                    if selectedImageData != nil {
+                        Divider()
+                        Button(role: .destructive, action: { selectedImageData = nil }) {
+                            Label("Eliminar imagen", systemImage: "trash")
+                        }
+                    }
+                } label: {
                     if let selectedImageData, let uiImage = UIImage(data: selectedImageData) {
                         Image(uiImage: uiImage)
                             .resizable()
@@ -45,13 +58,6 @@ struct NewFolderSheet: View {
                         .padding()
                         .background(Color(.systemGray6))
                         .cornerRadius(8)
-                    }
-                }
-                .onChange(of: selectedItem) { newItem in
-                    Task {
-                        if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                            selectedImageData = data
-                        }
                     }
                 }
                 
@@ -76,6 +82,14 @@ struct NewFolderSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancelar") { isPresented = false }
                 }
+            }
+            .sheet(item: $imagePickerRequest) { request in
+                ImagePickerView(onImagePicked: { image in
+                    let resizedImage = image.resized(toMaxDimension: 1024)
+                    if let data = resizedImage.jpegData(compressionQuality: 0.8) {
+                        selectedImageData = data
+                    }
+                }, sourceType: request.sourceType)
             }
         }
     }

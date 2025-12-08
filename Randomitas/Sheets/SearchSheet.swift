@@ -1,61 +1,49 @@
 //
-//  FavoritesSheet.swift
+//  SearchSheet.swift
 //  Randomitas
 //
-//  Created by Astor Ludueña  on 14/11/2025.
+//  Created by Astor Ludueña on 01/12/2025.
 //
 
 internal import SwiftUI
 
-struct FavoriteDestination: Identifiable, Hashable {
-    let id = UUID()
-    let path: [Int]
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    
-    static func == (lhs: FavoriteDestination, rhs: FavoriteDestination) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
-struct FavoritesSheet: View {
+struct SearchSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     @Binding var isPresented: Bool
-    @State var selectedDestination: FavoriteDestination?
+    @State private var searchText = ""
+    @State private var foundFolders: [(Folder, [Int])] = []
     
     var body: some View {
         NavigationStack {
             List {
-                // Carpetas Favoritas
-                if !viewModel.folderFavorites.isEmpty {
+                if !foundFolders.isEmpty {
                     Section(header: Text("Carpetas")) {
-                        ForEach(viewModel.folderFavorites, id: \.0.id) { fav in
-                            NavigationLink(value: FavoriteDestination(path: fav.1)) {
+                        ForEach(foundFolders, id: \.0.id) { folder, path in
+                            NavigationLink(value: FavoriteDestination(path: path)) {
                                 HStack {
                                     Image(systemName: "folder.fill")
                                         .foregroundColor(.blue)
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(fav.0.name)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.primary)
-                                    }
+                                    Text(folder.name)
                                 }
                             }
-                        }
-                        .onDelete { indices in
-                            viewModel.removeFolderFavorites(at: indices)
                         }
                     }
                 }
                 
-                if viewModel.folderFavorites.isEmpty {
-                    Text("Sin favoritos")
+                if searchText.isEmpty {
+                    Text("Escribe para buscar")
+                        .foregroundColor(.gray)
+                } else if foundFolders.isEmpty {
+                    Text("No se encontraron resultados")
                         .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Favoritos")
+            .searchable(text: $searchText, prompt: "Buscar carpetas")
+            .onChange(of: searchText) { query in
+                let results = viewModel.search(query: query)
+                foundFolders = results
+            }
+            .navigationTitle("Buscar")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: FavoriteDestination.self) { destination in
                 if let folderView = buildFolderViewFromPath(destination.path) {
