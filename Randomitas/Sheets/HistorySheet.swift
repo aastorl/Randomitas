@@ -22,9 +22,14 @@ struct HistorySheet: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(entry.itemName)
                                 .fontWeight(.semibold)
-                            Text(entry.path)
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                            let reversed = reversePathString(entry.path, itemName: entry.itemName)
+                            if !reversed.isEmpty {
+                                HStack(spacing: 4) {
+                                    Text("< \(reversed)")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
+                            }
                             Text(entry.timestamp, style: .time)
                                 .font(.caption2)
                                 .foregroundColor(.gray)
@@ -40,5 +45,20 @@ struct HistorySheet: View {
                 }
             }
         }
+    }
+
+    private func reversePathString(_ path: String, itemName: String) -> String {
+        var components = path.components(separatedBy: " > ")
+        
+        // Remove item name if it's at the end (to get parent path)
+        if let last = components.last, last == itemName {
+            components.removeLast()
+        }
+        
+        if components.isEmpty {
+            return "Randomitas"
+        }
+        
+        return components.reversed().joined(separator: " < ")
     }
 }

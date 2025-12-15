@@ -7,40 +7,39 @@
 
 internal import SwiftUI
 
-struct HiddenDestination: Identifiable, Hashable {
-    let id = UUID()
-    let path: [Int]
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    
-    static func == (lhs: HiddenDestination, rhs: HiddenDestination) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
 struct HiddenFoldersSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     @Binding var isPresented: Bool
-    @State var selectedDestination: HiddenDestination?
+    var navigateToFullPath: ([Int]) -> Void
+    @Binding var highlightedItemId: UUID?
     @State private var hiddenFolders: [(folder: Folder, path: [Int])] = []
     
     var body: some View {
         NavigationStack {
             List {
                 if !hiddenFolders.isEmpty {
-                    Section(header: Text("Carpetas Ocultas")) {
+                    Section(header: Text("Elementos Ocultos")) {
                         ForEach(Array(hiddenFolders.enumerated()), id: \.element.folder.id) { index, item in
-                            NavigationLink(value: HiddenDestination(path: item.path)) {
+                            Button(action: {
+                                highlightedItemId = item.folder.id
+                                let parentPath = Array(item.path.dropLast())
+                                navigateToFullPath(parentPath)
+                                isPresented = false
+                            }) {
                                 HStack {
-                                    Image(systemName: "eye.slash")
-                                        .foregroundColor(.gray)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(item.folder.name)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.primary)
+                                        HStack(spacing: 4) {
+                                            Text("< \(viewModel.getReversedPathString(for: item.path))")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
                                     }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.gray)
                                 }
                             }
                         }
@@ -52,17 +51,12 @@ struct HiddenFoldersSheet: View {
                 }
                 
                 if hiddenFolders.isEmpty {
-                    Text("Sin carpetas ocultas")
+                    Text("Sin Elementos ocultos")
                         .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Carpetas Ocultas")
+            .navigationTitle("Elementos Ocultas")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: HiddenDestination.self) { destination in
-                if let folderView = buildFolderViewFromPath(destination.path) {
-                    folderView
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cerrar") {
@@ -74,21 +68,5 @@ struct HiddenFoldersSheet: View {
                 hiddenFolders = viewModel.getHiddenFolders()
             }
         }
-    }
-    
-    private func buildFolderViewFromPath(_ path: [Int]) -> FolderDetailView? {
-        guard !path.isEmpty else { return nil }
-        
-        var currentFolder = viewModel.folders[path[0]]
-        for i in 1..<path.count {
-            guard i < path.count, path[i] < currentFolder.subfolders.count else { return nil }
-            currentFolder = currentFolder.subfolders[path[i]]
-        }
-        
-        return FolderDetailView(
-            folder: FolderWrapper(currentFolder),
-            folderPath: path,
-            viewModel: viewModel
-        )
     }
 }

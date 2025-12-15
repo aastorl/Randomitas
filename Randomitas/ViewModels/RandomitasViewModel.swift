@@ -55,9 +55,9 @@ class RandomitasViewModel: ObservableObject {
             // Ordenar por nombre para consistencia
             let sorted = entities.sorted { ($0.name ?? "") < ($1.name ?? "") }
             folders = sorted.map { convertToFolder($0) }
-            print("✅ Carpetas raíz cargadas: \(folders.count)")
+            print("Carpetas raíz cargadas: \(folders.count)")
         } catch {
-            print("❌ Error cargando carpetas: \(error)")
+            print("Error cargando carpetas: \(error)")
         }
     }
     
@@ -81,7 +81,7 @@ class RandomitasViewModel: ObservableObject {
             
             folderFavorites = uniqueFolderFavorites
         } catch {
-            print("❌ Error: \(error)")
+            print("Error: \(error)")
         }
     }
     
@@ -95,7 +95,7 @@ class RandomitasViewModel: ObservableObject {
                 return HistoryEntry(id: id, itemName: name, path: path, timestamp: ts)
             }
         } catch {
-            print("❌ Error: \(error)")
+            print("Error: \(error)")
         }
     }
     
@@ -109,7 +109,7 @@ class RandomitasViewModel: ObservableObject {
             subfolders = uniqueSubfolders.map { convertToFolder($0) }
                 .sorted { $0.name < $1.name }
             if !subfolders.isEmpty {
-                print("  📁 Subcarpetas encontradas en '\(entity.name ?? "")': \(subfolders.count)")
+                print("Subcarpetas encontradas en '\(entity.name ?? "")': \(subfolders.count)")
             }
         }
         
@@ -166,10 +166,10 @@ class RandomitasViewModel: ObservableObject {
     // MARK: - Subfolders
     func addSubfolder(name: String, to folderPath: [Int], isFavorite: Bool = false, imageData: Data? = nil) {
         guard let parent = getFolderEntity(at: folderPath) else {
-            print("❌ No se encontró carpeta padre")
+            print("No se encontró carpeta padre")
             return
         }
-        print("✅ Creando subcarpeta '\(name)' en '\(parent.name ?? "sin nombre")'")
+        print("Creando subcarpeta '\(name)' en '\(parent.name ?? "sin nombre")'")
         
         let subfolder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
         subfolder.id = UUID()
@@ -178,7 +178,7 @@ class RandomitasViewModel: ObservableObject {
         subfolder.imageData = imageData
         subfolder.createdAt = Date()
         
-        print("✅ Parent asignado: \(parent.name ?? "")")
+        print("Parent asignado: \(parent.name ?? "")")
         coreDataStack.save()
         
         if isFavorite {
@@ -233,12 +233,12 @@ class RandomitasViewModel: ObservableObject {
     
     private func getFolderEntity(at indices: [Int]) -> FolderEntity? {
         guard !indices.isEmpty else {
-            print("❌ Path vacío")
+            print("Path vacío")
             return nil
         }
         
         guard indices[0] < folders.count else {
-            print("❌ Índice raíz fuera de rango: \(indices[0]) >= \(folders.count)")
+            print("Índice raíz fuera de rango: \(indices[0]) >= \(folders.count)")
             return nil
         }
         
@@ -248,11 +248,11 @@ class RandomitasViewModel: ObservableObject {
         
         do {
             guard var current = try coreDataStack.context.fetch(request).first else {
-                print("❌ No se encontró carpeta raíz con ID: \(rootFolderId)")
+                print("No se encontró carpeta raíz con ID: \(rootFolderId)")
                 return nil
             }
             
-            print("✅ Carpeta encontrada en Core Data: \(current.name ?? "")")
+            print("Carpeta encontrada en Core Data: \(current.name ?? "")")
             
             // Navegar a través de las subcarpetas
             for (step, i) in indices.dropFirst().enumerated() {
@@ -261,17 +261,17 @@ class RandomitasViewModel: ObservableObject {
                     .sorted { ($0.name ?? "") < ($1.name ?? "") } ?? []
                 
                 guard i < subfoldersArray.count else {
-                    print("❌ Subcarpeta en índice \(i) no encontrada (total: \(subfoldersArray.count))")
+                    print("Subcarpeta en índice \(i) no encontrada (total: \(subfoldersArray.count))")
                     return nil
                 }
                 
                 current = subfoldersArray[i]
-                print("✅ Navegado a subcarpeta: \(current.name ?? "")")
+                print("Navegado a subcarpeta: \(current.name ?? "")")
             }
             
             return current
         } catch {
-            print("❌ Error en getFolderEntity: \(error)")
+            print("Error en getFolderEntity: \(error)")
             return nil
         }
     }
@@ -379,9 +379,9 @@ class RandomitasViewModel: ObservableObject {
             coreDataStack.save()
             coreDataStack.refresh()
             loadFolders()
-            print("✅ Limpieza de subcarpetas ocultas completada")
+            print("Limpieza de subcarpetas ocultas completada")
         } catch {
-            print("❌ Error limpiando subcarpetas: \(error)")
+            print("Error limpiando subcarpetas: \(error)")
         }
     }
     
@@ -476,20 +476,20 @@ class RandomitasViewModel: ObservableObject {
     
     // MARK: - Images
     func updateFolderImage(imageData: Data?, at folderPath: [Int]) {
-        print("📁 updateFolderImage llamado con path: \(folderPath)")
-        print("📁 Carpetas disponibles: \(folders.count), buscando índice: \(folderPath.first ?? -1)")
+        print("updateFolderImage llamado con path: \(folderPath)")
+        print("Carpetas disponibles: \(folders.count), buscando índice: \(folderPath.first ?? -1)")
         
         guard let entity = getFolderEntity(at: folderPath) else {
-            print("❌ No se encontró la carpeta para actualizar imagen en path: \(folderPath)")
+            print("No se encontró la carpeta para actualizar imagen en path: \(folderPath)")
             return
         }
         
-        print("✅ Carpeta encontrada: \(entity.name ?? "sin nombre")")
+        print("Carpeta encontrada: \(entity.name ?? "sin nombre")")
         entity.imageData = imageData
         coreDataStack.save()
         coreDataStack.refresh()
         loadFolders()
-        print("✅ Imagen actualizada y carpetas recargadas")
+        print("Imagen actualizada y carpetas recargadas")
     }
     
 
@@ -509,27 +509,28 @@ class RandomitasViewModel: ObservableObject {
                 coreDataStack.save()
                 coreDataStack.refresh()
                 loadFolders()
-                print("✅ Carpeta renombrada a: \(newName)")
+                print("Carpeta renombrada a: \(newName)")
             }
         } catch {
-            print("❌ Error renombrando carpeta: \(error)")
+            print("Error renombrando carpeta: \(error)")
         }
     }
     
 
     // MARK: - Sort Preferences
-    func getSortType(for folderId: UUID) -> SortType {
-        let key = "sort_\(folderId.uuidString)"
+    // MARK: - Sort Preferences
+    func getSortType(for folderId: UUID?) -> SortType {
+        let key = "sort_\(folderId?.uuidString ?? "root")"
         if let saved = userDefaults.string(forKey: key), let sortType = SortType(rawValue: saved) {
             return sortType
         }
         return .nameAsc
     }
     
-    func setSortType(_ sortType: SortType, for folderId: UUID) {
-        let key = "sort_\(folderId.uuidString)"
+    func setSortType(_ sortType: SortType, for folderId: UUID?) {
+        let key = "sort_\(folderId?.uuidString ?? "root")"
         userDefaults.set(sortType.rawValue, forKey: key)
-        print("💾 Ordenamiento guardado para carpeta: \(sortType.rawValue)")
+        print("Ordenamiento guardado para carpeta: \(sortType.rawValue)")
     }
     
 
@@ -549,18 +550,18 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // MARK: - View Preferences
-    func getViewType(for folderId: UUID) -> ViewType {
-        let key = "view_\(folderId.uuidString)"
+    func getViewType(for folderId: UUID?) -> ViewType {
+        let key = "view_\(folderId?.uuidString ?? "root")"
         if let saved = userDefaults.string(forKey: key), let viewType = ViewType(rawValue: saved) {
             return viewType
         }
         return .list
     }
     
-    func setViewType(_ viewType: ViewType, for folderId: UUID) {
-        let key = "view_\(folderId.uuidString)"
+    func setViewType(_ viewType: ViewType, for folderId: UUID?) {
+        let key = "view_\(folderId?.uuidString ?? "root")"
         userDefaults.set(viewType.rawValue, forKey: key)
-        print("💾 Vista guardada para carpeta: \(viewType.rawValue)")
+        print("Vista guardada para carpeta: \(viewType.rawValue)")
     }
     
     // MARK: - Move & Copy
@@ -623,28 +624,125 @@ class RandomitasViewModel: ObservableObject {
         }
     }
     
+    // MARK: - Batch Operations
+    func batchDeleteRootFolders(ids: Set<UUID>) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id IN %@ AND parent == nil", ids as CVarArg)
+        
+        do {
+            let foldersToDelete = try coreDataStack.context.fetch(request)
+            foldersToDelete.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error batch deleting root folders: \(error)")
+        }
+    }
+    
+    func batchDeleteSubfolders(ids: Set<UUID>, from parentPath: [Int]) {
+        guard let parent = getFolderEntity(at: parentPath) else { return }
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id IN %@ AND parent == %@", ids as CVarArg, parent)
+        
+        do {
+            let subs = try coreDataStack.context.fetch(request)
+            subs.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error batch deleting subfolders: \(error)")
+        }
+    }
+    
+    func batchToggleHiddenRoot(ids: Set<UUID>) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id IN %@ AND parent == nil", ids as CVarArg)
+        
+        do {
+            let foldersToToggle = try coreDataStack.context.fetch(request)
+            for folder in foldersToToggle {
+                let newState = !folder.isHidden
+                setFolderHidden(entity: folder, isHidden: newState)
+            }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error batch toggling hidden root: \(error)")
+        }
+    }
+    
+    func batchToggleHiddenSubfolders(ids: Set<UUID>, at parentPath: [Int]) {
+        guard let parent = getFolderEntity(at: parentPath) else { return }
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id IN %@ AND parent == %@", ids as CVarArg, parent)
+        
+        do {
+            let subs = try coreDataStack.context.fetch(request)
+            for folder in subs {
+                let newState = !folder.isHidden
+                setFolderHidden(entity: folder, isHidden: newState)
+            }
+            coreDataStack.save()
+            coreDataStack.refresh()
+            loadFolders()
+        } catch {
+            print("Error batch toggling hidden subfolders: \(error)")
+        }
+    }
+    
     // MARK: - Search
-    func search(query: String) -> [(Folder, [Int])] {
-        guard !query.isEmpty else { return [] }
+    // MARK: - Search
+    func getReversedPathString(for path: [Int]) -> String {
+        var names = ["Randomitas"]
+        var currentLevelFolders = folders
         
-        var foundFolders: [(Folder, [Int])] = []
+        let parentPath = path.dropLast() // We want path to the parent
         
-        // Helper recursive function
-        func searchRecursive(folders: [Folder], currentPath: [Int]) {
-            for (index, folder) in folders.enumerated() {
-                let newPath = currentPath + [index]
-                
-                // Check folder name
-                if folder.name.localizedCaseInsensitiveContains(query) {
-                    foundFolders.append((folder, newPath))
-                }
-                
-                // Recurse into subfolders
-                searchRecursive(folders: folder.subfolders, currentPath: newPath)
+        for index in parentPath {
+            if index < currentLevelFolders.count {
+                let folder = currentLevelFolders[index]
+                names.append(folder.name)
+                currentLevelFolders = folder.subfolders
+            } else {
+                break
             }
         }
         
-        searchRecursive(folders: folders, currentPath: [])
+        return names.reversed().joined(separator: " < ")
+    }
+    
+    func search(query: String) -> [(Folder, [Int], String)] {
+        guard !query.isEmpty else { return [] }
+        
+        var foundFolders: [(Folder, [Int], String)] = []
+        
+        // Helper recursive function
+        func searchRecursive(folders: [Folder], currentPath: [Int], parentNames: [String]) {
+            for (index, folder) in folders.enumerated() {
+                let newPath = currentPath + [index]
+                
+                // Check folder name (Prefix Match)
+                if folder.name.lowercased().hasPrefix(query.lowercased()) {
+                    let pathString = parentNames.reversed().joined(separator: " < ")
+                    foundFolders.append((folder, newPath, pathString))
+                }
+                
+                // Recurse into subfolders
+                var newParentNames = parentNames
+                newParentNames.append(folder.name)
+                searchRecursive(folders: folder.subfolders, currentPath: newPath, parentNames: newParentNames)
+            }
+        }
+        
+        searchRecursive(folders: folders, currentPath: [], parentNames: ["Randomitas"]) // Start with Root name if desired, or empty? 
+        // User said "igual que History", which shows Root.
+        // If I pass ["Randomitas"], then a top-level folder "Folder A" will have parent "Randomitas".
+        // Path string: "Randomitas".
+        // Display: "< Randomitas".
+        // Sounds correct.
         return foundFolders
     }
     
@@ -682,7 +780,8 @@ class RandomitasViewModel: ObservableObject {
         let resultPath = path + [originalIndex]
         
         // Save to history
-        let pathString = getFolderPathString(for: resultPath)
+        // Use dropLast() to exclude the current folder name from the path string
+        let pathString = getFolderPathString(for: Array(resultPath.dropLast()))
         let entry = HistoryEntry(itemName: selectedFolder.name, path: pathString)
         saveHistory(entry)
         
@@ -711,7 +810,8 @@ class RandomitasViewModel: ObservableObject {
         let selected = allFolders[randomIndex]
         
         // Save to history
-        let pathString = getFolderPathString(for: selected.path)
+        // Use dropLast() to exclude the current folder name from the path string
+        let pathString = getFolderPathString(for: Array(selected.path.dropLast()))
         let entry = HistoryEntry(itemName: selected.folder.name, path: pathString)
         saveHistory(entry)
         
@@ -734,7 +834,8 @@ class RandomitasViewModel: ObservableObject {
         let selected = allFolders[randomIndex]
         
         // Save to history
-        let pathString = getFolderPathString(for: selected.path)
+        // Use dropLast() to exclude the current folder name from the path string
+        let pathString = getFolderPathString(for: Array(selected.path.dropLast()))
         let entry = HistoryEntry(itemName: selected.folder.name, path: pathString)
         saveHistory(entry)
         

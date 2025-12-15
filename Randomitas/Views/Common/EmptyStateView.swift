@@ -12,24 +12,24 @@ struct EmptyStateView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            Image(systemName: "folder.badge.questionmark")
+            Image(systemName: "bookmark.slash")
                 .font(.system(size: 64))
                 .foregroundColor(.gray)
             
             VStack(spacing: 8) {
-                Text("Comienza creando una carpeta")
+                Text("Comienza creando un Elemento")
                     .font(.headline)
                     .foregroundColor(.gray)
                 
-                Text("Los items solo pueden existir dentro de carpetas")
+                Text("Los items solo pueden existir dentro de carpetas") // Depreacated
                     .font(.caption)
                     .foregroundColor(.gray)
             }
             
             Button(action: { showingNewFolderSheet = true }) {
                 HStack(spacing: 8) {
-                    Image(systemName: "folder.badge.plus")
-                    Text("Nueva Carpeta")
+                    Image(systemName: "bookmark.slash")
+                    Text("Nuevo Elemento")
                 }
                 .frame(maxWidth: .infinity)
                 .padding()

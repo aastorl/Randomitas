@@ -10,20 +10,36 @@ internal import SwiftUI
 struct SearchSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     @Binding var isPresented: Bool
+    var navigateToFullPath: ([Int]) -> Void
+    @Binding var highlightedItemId: UUID?
     @State private var searchText = ""
-    @State private var foundFolders: [(Folder, [Int])] = []
+    @State private var foundFolders: [(Folder, [Int], String)] = []
     
     var body: some View {
         NavigationStack {
             List {
                 if !foundFolders.isEmpty {
-                    Section(header: Text("Carpetas")) {
-                        ForEach(foundFolders, id: \.0.id) { folder, path in
-                            NavigationLink(value: FavoriteDestination(path: path)) {
+                    Section(header: Text("Elementos Encontrados")) {
+                        ForEach(foundFolders, id: \.0.id) { folder, path, parentName in
+                            Button(action: {
+                                highlightedItemId = folder.id
+                                let parentPath = Array(path.dropLast())
+                                navigateToFullPath(parentPath)
+                                isPresented = false
+                            }) {
                                 HStack {
-                                    Image(systemName: "folder.fill")
-                                        .foregroundColor(.blue)
-                                    Text(folder.name)
+                                    VStack(alignment: .leading) {
+                                        Text(folder.name)
+                                            .foregroundColor(.primary)
+                                        HStack(spacing: 4) {
+                                            Text("< \(parentName)")
+                                                .font(.caption)
+                                        }
+                                        .foregroundColor(.gray)
+                                    }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.gray)
                                 }
                             }
                         }
@@ -34,22 +50,17 @@ struct SearchSheet: View {
                     Text("Escribe para buscar")
                         .foregroundColor(.gray)
                 } else if foundFolders.isEmpty {
-                    Text("No se encontraron resultados")
+                    Text("No se encontraron Elementos")
                         .foregroundColor(.gray)
                 }
             }
-            .searchable(text: $searchText, prompt: "Buscar carpetas")
+            .searchable(text: $searchText, prompt: "Buscar Elementos")
             .onChange(of: searchText) { query in
                 let results = viewModel.search(query: query)
                 foundFolders = results
             }
             .navigationTitle("Buscar")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: FavoriteDestination.self) { destination in
-                if let folderView = buildFolderViewFromPath(destination.path) {
-                    folderView
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cerrar") {
@@ -58,21 +69,5 @@ struct SearchSheet: View {
                 }
             }
         }
-    }
-    
-    private func buildFolderViewFromPath(_ path: [Int]) -> FolderDetailView? {
-        guard !path.isEmpty else { return nil }
-        
-        var currentFolder = viewModel.folders[path[0]]
-        for i in 1..<path.count {
-            guard i < path.count, path[i] < currentFolder.subfolders.count else { return nil }
-            currentFolder = currentFolder.subfolders[path[i]]
-        }
-        
-        return FolderDetailView(
-            folder: FolderWrapper(currentFolder),
-            folderPath: path,
-            viewModel: viewModel
-        )
     }
 }

@@ -7,40 +7,39 @@
 
 internal import SwiftUI
 
-struct FavoriteDestination: Identifiable, Hashable {
-    let id = UUID()
-    let path: [Int]
-    
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-    }
-    
-    static func == (lhs: FavoriteDestination, rhs: FavoriteDestination) -> Bool {
-        lhs.id == rhs.id
-    }
-}
-
 struct FavoritesSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     @Binding var isPresented: Bool
-    @State var selectedDestination: FavoriteDestination?
+    var navigateToFullPath: ([Int]) -> Void
+    @Binding var highlightedItemId: UUID?
     
     var body: some View {
         NavigationStack {
             List {
                 // Carpetas Favoritas
                 if !viewModel.folderFavorites.isEmpty {
-                    Section(header: Text("Carpetas")) {
+                    Section(header: Text("")) {
                         ForEach(viewModel.folderFavorites, id: \.0.id) { fav in
-                            NavigationLink(value: FavoriteDestination(path: fav.1)) {
+                            Button(action: {
+                                highlightedItemId = fav.0.id
+                                let parentPath = Array(fav.1.dropLast())
+                                navigateToFullPath(parentPath)
+                                isPresented = false
+                            }) {
                                 HStack {
-                                    Image(systemName: "folder.fill")
-                                        .foregroundColor(.blue)
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(fav.0.name)
                                             .fontWeight(.semibold)
                                             .foregroundColor(.primary)
+                                        HStack(spacing: 4) {
+                                            Text("< \(viewModel.getReversedPathString(for: fav.1))")
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
                                     }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.gray)
                                 }
                             }
                         }
@@ -51,17 +50,12 @@ struct FavoritesSheet: View {
                 }
                 
                 if viewModel.folderFavorites.isEmpty {
-                    Text("Sin favoritos")
+                    Text("Sin Elementos Favoritos")
                         .foregroundColor(.gray)
                 }
             }
             .navigationTitle("Favoritos")
             .navigationBarTitleDisplayMode(.inline)
-            .navigationDestination(for: FavoriteDestination.self) { destination in
-                if let folderView = buildFolderViewFromPath(destination.path) {
-                    folderView
-                }
-            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cerrar") {
@@ -70,21 +64,5 @@ struct FavoritesSheet: View {
                 }
             }
         }
-    }
-    
-    private func buildFolderViewFromPath(_ path: [Int]) -> FolderDetailView? {
-        guard !path.isEmpty else { return nil }
-        
-        var currentFolder = viewModel.folders[path[0]]
-        for i in 1..<path.count {
-            guard i < path.count, path[i] < currentFolder.subfolders.count else { return nil }
-            currentFolder = currentFolder.subfolders[path[i]]
-        }
-        
-        return FolderDetailView(
-            folder: FolderWrapper(currentFolder),
-            folderPath: path,
-            viewModel: viewModel
-        )
     }
 }

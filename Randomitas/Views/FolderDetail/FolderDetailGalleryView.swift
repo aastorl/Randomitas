@@ -17,25 +17,47 @@ struct FolderDetailGalleryView: View {
     @Binding var editingName: String
     var isEditing: FocusState<Bool>.Binding
     @Binding var imagePickerRequest: ImagePickerRequest?
-    
     @Binding var moveCopyOperation: MoveCopyOperation?
     
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(spacing: 20) {
-                ForEach(sortedSubfolders, id: \.id) { subfolder in
-                    galleryFolderCell(subfolder)
-                }
+    @Binding var isSelectionMode: Bool
+    @Binding var navigationPath: NavigationPath
+    @Binding var selectedItemIds: Set<UUID>
 
+    var highlightedItemId: UUID? // Added
+    
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: 20) {
+                    ForEach(sortedSubfolders, id: \.id) { subfolder in
+                        galleryFolderCell(subfolder)
+                            .id(subfolder.id)
+                    }
+                }
+                .padding()
+                .padding(.bottom, 80)
             }
-            .padding()
+            .onAppear {
+                if let id = highlightedItemId {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+            }
         }
     }
     
     @ViewBuilder
     private func galleryFolderCell(_ subfolder: Folder) -> some View {
         let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-        NavigationLink(destination: FolderDetailView(folder: FolderWrapper(subfolder), folderPath: folderPath + [idx], viewModel: viewModel)) {
+        NavigationLink(destination: FolderDetailView(
+            folder: FolderWrapper(subfolder),
+            folderPath: folderPath + [idx],
+            viewModel: viewModel,
+            navigationPath: $navigationPath
+        )) {
             ZStack(alignment: .bottomLeading) {
                 if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
                     Image(uiImage: uiImage)
@@ -47,7 +69,7 @@ struct FolderDetailGalleryView: View {
                 } else {
                     LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                         .frame(height: 300)
-                        .overlay(Image(systemName: "folder.fill").font(.system(size: 48)).foregroundColor(.blue))
+                        .overlay(Image(systemName: "atom").font(.system(size: 48)).foregroundColor(.blue))
                 }
                 
                 // Indicador de carpeta oculta (esquina superior derecha)
@@ -56,7 +78,7 @@ struct FolderDetailGalleryView: View {
                         HStack {
                             Spacer()
                             Image(systemName: "eye.slash")
-                                .font(.system(size: 14))
+                                                            .font(.system(size: 14))
                                 .foregroundColor(.white)
                                 .padding(8)
                                 .background(Color.black.opacity(0.6))
@@ -97,6 +119,7 @@ struct FolderDetailGalleryView: View {
             )
             .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         }
+        .disabled(isSelectionMode)
         .contextMenu {
             Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
                 Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
@@ -109,12 +132,18 @@ struct FolderDetailGalleryView: View {
                 Label("Renombrar", systemImage: "pencil")
             }
             Button {
-                moveCopyOperation = MoveCopyOperation(folder: subfolder, sourcePath: folderPath + [idx], isCopy: false)
+                isSelectionMode = true
+                selectedItemIds.insert(subfolder.id)
+            } label: {
+                Label("Seleccionar", systemImage: "checkmark.circle")
+            }
+            Button {
+                moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: false)
             } label: {
                 Label("Mover", systemImage: "arrow.turn.up.right")
             }
             Button {
-                moveCopyOperation = MoveCopyOperation(folder: subfolder, sourcePath: folderPath + [idx], isCopy: true)
+                moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: true)
             } label: {
                 Label("Copiar", systemImage: "doc.on.doc")
             }

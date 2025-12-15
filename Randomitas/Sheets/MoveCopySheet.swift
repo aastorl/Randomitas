@@ -11,201 +11,466 @@ struct MoveCopySheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     @Binding var isPresented: Bool
     
-    let folderToMove: Folder
-    let currentPath: [Int]
+    let foldersToMove: [Folder]
+    let sourceContainerPath: [Int]
     let isCopy: Bool
+    var onSuccess: (() -> Void)? = nil
+    
+    // State for Tree View
+    @State private var expandedFolderIds: Set<UUID> = []
+    @State private var isRootExpanded: Bool = true
+    @State private var selectedTargetFolder: Folder? = nil
+    @State private var isRootSelected: Bool = false
+    
+    // Alerts
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+    @State private var showingReplaceAlert = false
+    @State private var conflictingFolders: [Folder] = []
+    
+    // MEMORIA TEMPORAL: Solo recuerda si fue hace menos de 2 minutos
+    @AppStorage("lastMoveCopyTargetPath") private var lastTargetPathString: String = ""
+    @AppStorage("lastMoveCopyWasRoot") private var lastWasRoot: Bool = false
+    @AppStorage("lastMoveCopyTimestamp") private var lastTimestamp: Double = 0
+    
+    private let memoryDuration: TimeInterval = 120 // 2 minutos
     
     var body: some View {
         NavigationStack {
-            MoveCopyListView(
-                viewModel: viewModel,
-                currentFolder: nil, // Root
-                currentPath: [],
-                sourcePath: currentPath,
-                folderToMove: folderToMove,
-                isCopy: isCopy,
-                onClose: { isPresented = false }
-            )
-        }
-    }
-}
-
-struct MoveCopyListView: View {
-    @ObservedObject var viewModel: RandomitasViewModel
-    let currentFolder: Folder?
-    let currentPath: [Int]
-    let sourcePath: [Int]
-    let folderToMove: Folder
-    let isCopy: Bool
-    let onClose: () -> Void
-    
-    @State private var showingErrorAlert = false
-    @State private var errorMessage = ""
-    
-    // Helper to get subfolders to display
-    var subfolders: [Folder] {
-        if let folder = currentFolder {
-            return folder.subfolders
-        } else {
-            return viewModel.folders
-        }
-    }
-    
-    var body: some View {
-        List {
-            if subfolders.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "folder.badge.questionmark")
-                        .font(.system(size: 40))
-                        .foregroundColor(.gray)
-                    Text("Carpeta vacía")
-                        .font(.headline)
-                        .foregroundColor(.gray)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 40)
-                .listRowBackground(Color.clear)
-            } else {
-                ForEach(Array(subfolders.enumerated()), id: \.element.id) { index, folder in
-                    // Calculate path for this subfolder
-                    let subfolderPath = currentFolder == nil ? [index] : currentPath + [index]
-                    
-                    NavigationLink(value: MoveCopyDestination(folder: folder, path: subfolderPath)) {
-                        HStack {
-                            Image(systemName: "folder.fill")
-                                .foregroundColor(.blue)
-                            Text(folder.name)
-                                .foregroundColor(.primary)
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 5) {
+                        // Root Node as part of tree
+                        VStack(alignment: .leading, spacing: 0) {
+                            HStack {
+                                // Chevron for Root
+                                Image(systemName: "chevron.right")
+                                    .rotationEffect(isRootExpanded ? .degrees(90) : .zero)
+                                    .foregroundColor(.gray)
+                                    .onTapGesture {
+                                        withAnimation {
+                                            isRootExpanded.toggle()
+                                        }
+                                    }
+                                    .frame(width: 30, height: 30)
+                                    .contentShape(Rectangle())
+                                
+                                // Root Icon & Name
+                                Button(action: {
+                                    selectRoot()
+                                }) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: "house.fill")
+                                            .font(.title3)
+                                            .foregroundColor(.orange)
+                                        Text("Randomitas")
+                                            .font(.headline)
+                                            .foregroundColor(.primary)
+                                        Spacer()
+                                        if isRootSelected {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.title3)
+                                                .foregroundColor(.blue)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(isRootSelected ? Color.blue.opacity(0.1) : Color.clear)
+                            )
+                            .padding(.horizontal, 16)
+                            .contentShape(Rectangle())
+                            
+                            // Children of Root
+                            if isRootExpanded {
+                                LazyVStack(alignment: .leading, spacing: 0) {
+                                    ForEach(viewModel.folders) { folder in
+                                        FolderTreeNode(
+                                            folder: folder,
+                                            level: 1,
+                                            expandedIds: $expandedFolderIds,
+                                            selectedFolder: $selectedTargetFolder,
+                                            isRootSelected: $isRootSelected,
+                                            foldersToMove: foldersToMove,
+                                            fullPath: [viewModel.folders.firstIndex(where: { $0.id == folder.id }) ?? 0]
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
-                    .disabled(isDisabled(folder: folder, path: subfolderPath))
+                    .padding(.vertical)
+                }
+                
+                // Action Bar
+                VStack {
+                    Divider()
+                    HStack {
+                        Button("Cancelar") { isPresented = false }
+                            .foregroundColor(.red)
+                        Spacer()
+                        Button(action: validateAndPerformAction) {
+                            Text(isCopy ? "Copiar aquí" : "Mover aquí")
+                                .fontWeight(.bold)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(isActionDisabled ? Color.gray : Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(8)
+                        }
+                        .disabled(isActionDisabled)
+                    }
+                    .padding()
+                    .background(Color(.systemBackground))
                 }
             }
-        }
-        .navigationTitle(isCopy ? "Copiar a..." : "Mover a...")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                if currentFolder == nil {
-                    Button("Cancelar") { onClose() }
+            .navigationTitle(isCopy ? "Copiar a..." : "Mover a...")
+            .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                // 🆕 Decidir si cargar memoria o empezar en Root
+                if isRecentSession() {
+                    loadLastTargetLocation()
+                } else {
+                    // Si pasó mucho tiempo, limpiar y empezar en Root
+                    clearMemory()
+                    expandCurrentPath()
                 }
             }
-            
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(isCopy ? "Copiar" : "Mover") {
-                    validateAndPerformAction()
-                }
-                .disabled(isCurrentLocation())
+            .alert("Acción no permitida", isPresented: $showingErrorAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
             }
-        }
-        .navigationDestination(for: MoveCopyDestination.self) { destination in
-            MoveCopyListView(
-                viewModel: viewModel,
-                currentFolder: destination.folder,
-                currentPath: destination.path,
-                sourcePath: sourcePath,
-                folderToMove: folderToMove,
-                isCopy: isCopy,
-                onClose: onClose
-            )
-        }
-        .alert("Acción no permitida", isPresented: $showingErrorAlert) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text(errorMessage)
+            .alert("¿Reemplazar elementos existentes?", isPresented: $showingReplaceAlert) {
+                Button("Cancelar", role: .cancel) {
+                    conflictingFolders = []
+                }
+                Button("Reemplazar", role: .destructive) {
+                    replaceAndPerformAction()
+                }
+            } message: {
+                if conflictingFolders.count == 1 {
+                    Text("Ya existe un Elemento llamado \"\(conflictingFolders.first?.name ?? "")\". ¿Quieres reemplazarlo?")
+                } else {
+                    Text("Ya existen \(conflictingFolders.count) Elementos con los mismos nombres. ¿Quieres reemplazarlos?")
+                }
+            }
         }
     }
     
-    // MARK: - Validation Logic
-    
-    private func isDisabled(folder: Folder, path: [Int]) -> Bool {
-        // Prevent navigating into the folder being moved (circular reference)
-        if folder.id == folderToMove.id {
-            return true
-        }
+    private var isActionDisabled: Bool {
+        if selectedTargetFolder == nil && !isRootSelected { return true }
         
-        // Prevent navigating into any subfolder of the folder being moved
-        if isSubfolderOf(folder: folder, parent: folderToMove) {
-            return true
+        if let targetId = selectedTargetFolder?.id {
+            if foldersToMove.contains(where: { $0.id == targetId }) {
+                return true
+            }
         }
-        
         return false
     }
     
-    private func isSubfolderOf(folder: Folder, parent: Folder) -> Bool {
-        for subfolder in parent.subfolders {
-            if subfolder.id == folder.id {
-                return true
-            }
-            if isSubfolderOf(folder: folder, parent: subfolder) {
-                return true
-            }
+    // MARK: - Logic
+    
+    private func selectRoot() {
+        if isRootSelected {
+            isRootSelected = false
+        } else {
+            selectedTargetFolder = nil
+            isRootSelected = true
         }
-        return false
     }
     
-    private func isCurrentLocation() -> Bool {
-        return currentPath == sourcePath
+    // 🆕 VERIFICAR SI ES UNA SESIÓN RECIENTE (< 2 minutos)
+    private func isRecentSession() -> Bool {
+        let now = Date().timeIntervalSince1970
+        let elapsed = now - lastTimestamp
+        return elapsed < memoryDuration && lastTimestamp > 0
     }
     
-    private func validateAndPerformAction() {
-        print("🔍 Validating Move/Copy Action:")
-        print("   - folderToMove: \(folderToMove.name)")
-        print("   - currentPath: \(currentPath)")
-        print("   - sourcePath: \(sourcePath)")
-        print("   - isCopy: \(isCopy)")
-        
-        // Validation: Cannot move/copy to the same location
-        if currentPath == sourcePath {
-            errorMessage = "No puedes \(isCopy ? "copiar" : "mover") a la misma ubicación."
-            showingErrorAlert = true
-            print("❌ Validation Failed: Same Location")
+    // 🆕 LIMPIAR MEMORIA
+    private func clearMemory() {
+        lastTargetPathString = ""
+        lastWasRoot = false
+        lastTimestamp = 0
+    }
+    
+    // 🆕 CARGAR ÚLTIMA UBICACIÓN GUARDADA
+    private func loadLastTargetLocation() {
+        if lastWasRoot {
+            selectRoot()
             return
         }
         
-        // Validation: Cannot move a folder into itself or its subfolders
-        if !isCopy {
-            if isPathInsideFolder(targetPath: currentPath, folderPath: sourcePath) {
-                errorMessage = "No puedes mover una carpeta dentro de sí misma."
-                showingErrorAlert = true
-                print("❌ Validation Failed: Circular Reference")
-                return
+        if !lastTargetPathString.isEmpty {
+            let pathComponents = lastTargetPathString.split(separator: ",").compactMap { Int($0) }
+            if let folder = viewModel.getFolderFromPath(pathComponents) {
+                selectedTargetFolder = folder
+                isRootSelected = false
+                
+                // Expandir el path hacia esa carpeta
+                var tempIds: Set<UUID> = []
+                var currentLevelFolders = viewModel.folders
+                
+                for pathIndex in pathComponents {
+                    if pathIndex < currentLevelFolders.count {
+                        let folder = currentLevelFolders[pathIndex]
+                        tempIds.insert(folder.id)
+                        currentLevelFolders = folder.subfolders
+                    }
+                }
+                expandedFolderIds = tempIds
+            } else {
+                // Si la carpeta ya no existe, empezar en Root
+                expandCurrentPath()
+            }
+        }
+    }
+    
+    // 🆕 GUARDAR UBICACIÓN Y TIMESTAMP
+    private func saveLastTargetLocation(targetPath: [Int]) {
+        if isRootSelected {
+            lastWasRoot = true
+            lastTargetPathString = ""
+        } else {
+            lastWasRoot = false
+            lastTargetPathString = targetPath.map { String($0) }.joined(separator: ",")
+        }
+        lastTimestamp = Date().timeIntervalSince1970
+    }
+    
+    private func expandCurrentPath() {
+        if sourceContainerPath.isEmpty {
+            selectRoot()
+        } else {
+            if let currentFolder = viewModel.getFolderFromPath(sourceContainerPath) {
+                selectedTargetFolder = currentFolder
+                isRootSelected = false
+            } else {
+                selectRoot()
             }
         }
         
-        // Perform the action
-        performAction()
-    }
-    
-    private func isPathInsideFolder(targetPath: [Int], folderPath: [Int]) -> Bool {
-        // Check if targetPath starts with folderPath
-        guard targetPath.count >= folderPath.count else { return false }
-        return Array(targetPath.prefix(folderPath.count)) == folderPath
-    }
-    
-    private func performAction() {
-        print("✅ Performing \(isCopy ? "Copy" : "Move") Action")
+        var tempIds: Set<UUID> = []
+        var currentLevelFolders = viewModel.folders
         
-        if isCopy {
-            viewModel.copyFolder(id: folderToMove.id, to: currentPath)
-        } else {
-            viewModel.moveFolder(id: folderToMove.id, to: currentPath)
+        for (index, pathIndex) in sourceContainerPath.enumerated() {
+            if pathIndex < currentLevelFolders.count {
+                let folder = currentLevelFolders[pathIndex]
+                tempIds.insert(folder.id)
+                currentLevelFolders = folder.subfolders
+            } else {
+                break
+            }
         }
         
-        onClose()
+        expandedFolderIds = tempIds.union(expandedFolderIds)
+    }
+    
+    private func validateAndPerformAction() {
+        let targetPath = calculatePath(for: selectedTargetFolder)
+        
+        // Check 1: Same location
+        if targetPath == sourceContainerPath {
+             errorMessage = "No puedes \(isCopy ? "copiar" : "mover") a la misma ubicación."
+             showingErrorAlert = true
+             return
+        }
+        
+        // Check 2: Moving into itself (Circular)
+        if !isCopy {
+             if let selectedId = selectedTargetFolder?.id {
+                 if foldersToMove.contains(where: { $0.id == selectedId || isSubfolderOf(folder: selectedTargetFolder!, parent: $0) }) {
+                     errorMessage = "No puedes mover un Elemento dentro de sí mismo."
+                     showingErrorAlert = true
+                     return
+                 }
+             }
+        }
+        
+        checkForConflictsAndPerform(targetPath: targetPath)
+    }
+    
+    private func calculatePath(for folder: Folder?) -> [Int] {
+        guard let folder = folder else { return [] }
+        return findPath(for: folder.id, in: viewModel.folders) ?? []
+    }
+    
+    private func findPath(for id: UUID, in folders: [Folder]) -> [Int]? {
+        for (index, folder) in folders.enumerated() {
+            if folder.id == id {
+                return [index]
+            }
+            if let subPath = findPath(for: id, in: folder.subfolders) {
+                return [index] + subPath
+            }
+        }
+        return nil
+    }
+    
+    private func isSubfolderOf(folder: Folder, parent: Folder) -> Bool {
+        for sub in parent.subfolders {
+            if sub.id == folder.id { return true }
+            if isSubfolderOf(folder: folder, parent: sub) { return true }
+        }
+        return false
+    }
+    
+    private func checkForConflictsAndPerform(targetPath: [Int]) {
+        let destinationSubfolders: [Folder]
+        if let targetFolder = selectedTargetFolder {
+            destinationSubfolders = targetFolder.subfolders
+        } else {
+            destinationSubfolders = viewModel.folders
+        }
+        
+        conflictingFolders = destinationSubfolders.filter { dest in
+            foldersToMove.contains { $0.name == dest.name }
+        }
+        
+        if !conflictingFolders.isEmpty {
+             showingReplaceAlert = true
+             return
+        }
+        
+        performAction(targetPath: targetPath)
+    }
+    
+    private func replaceAndPerformAction() {
+        let targetPath = calculatePath(for: selectedTargetFolder)
+        
+        for conflict in conflictingFolders {
+            if selectedTargetFolder == nil {
+                viewModel.deleteRootFolder(id: conflict.id)
+            } else {
+                viewModel.deleteSubfolder(id: conflict.id, from: targetPath)
+            }
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            performAction(targetPath: targetPath)
+        }
+    }
+    
+    private func performAction(targetPath: [Int]) {
+        // 🆕 GUARDAR ubicación y timestamp
+        saveLastTargetLocation(targetPath: targetPath)
+        
+        for folder in foldersToMove {
+             if isCopy {
+                 viewModel.copyFolder(id: folder.id, to: targetPath)
+             } else {
+                 viewModel.moveFolder(id: folder.id, to: targetPath)
+             }
+        }
+        onSuccess?()
+        isPresented = false
     }
 }
 
-struct MoveCopyDestination: Hashable {
+struct FolderTreeNode: View {
     let folder: Folder
-    let path: [Int]
+    let level: Int
+    @Binding var expandedIds: Set<UUID>
+    @Binding var selectedFolder: Folder?
+    @Binding var isRootSelected: Bool
+    let foldersToMove: [Folder]
+    let fullPath: [Int]
     
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(folder.id)
-        hasher.combine(path)
+    private var isExpanded: Binding<Bool> {
+        Binding(
+            get: { expandedIds.contains(folder.id) },
+            set: { isExpanded in
+                if isExpanded { expandedIds.insert(folder.id) }
+                else { expandedIds.remove(folder.id) }
+            }
+        )
     }
     
-    static func == (lhs: MoveCopyDestination, rhs: MoveCopyDestination) -> Bool {
-        lhs.folder.id == rhs.folder.id && lhs.path == rhs.path
+    private var isSelected: Bool {
+        selectedFolder?.id == folder.id
+    }
+    
+    private var isDisabled: Bool {
+        foldersToMove.contains(where: { $0.id == folder.id })
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 0) {
+                ForEach(0..<level, id: \.self) { _ in
+                    Spacer().frame(width: 24)
+                }
+                
+                if !folder.subfolders.isEmpty {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(isExpanded.wrappedValue ? .degrees(90) : .zero)
+                        .foregroundColor(.gray)
+                        .onTapGesture {
+                            withAnimation {
+                                isExpanded.wrappedValue.toggle()
+                            }
+                        }
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                } else {
+                     Spacer().frame(width: 30)
+                }
+                
+                Button(action: {
+                    selectThis()
+                }) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "atom")
+                            .font(.body)
+                            .foregroundColor(isDisabled ? .gray : .blue)
+                        Text(folder.name)
+                            .font(.body)
+                            .foregroundColor(isDisabled ? .gray : .primary)
+                        Spacer()
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+                .disabled(isDisabled)
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isSelected ? Color.blue.opacity(0.1) : Color.clear)
+            )
+            .padding(.horizontal, 16)
+            .contentShape(Rectangle())
+            
+            if isExpanded.wrappedValue {
+                ForEach(Array(folder.subfolders.enumerated()), id: \.element.id) { index, subfolder in
+                    FolderTreeNode(
+                        folder: subfolder,
+                        level: level + 1,
+                        expandedIds: $expandedIds,
+                        selectedFolder: $selectedFolder,
+                        isRootSelected: $isRootSelected,
+                        foldersToMove: foldersToMove,
+                        fullPath: fullPath + [index]
+                    )
+                }
+            }
+        }
+    }
+    
+    private func selectThis() {
+        if !isDisabled {
+            if selectedFolder?.id == folder.id {
+                selectedFolder = nil
+            } else {
+                selectedFolder = folder
+                isRootSelected = false
+            }
+        }
     }
 }

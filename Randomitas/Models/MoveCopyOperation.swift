@@ -9,13 +9,13 @@ import Foundation
 
 struct MoveCopyOperation: Identifiable {
     let id = UUID()
-    let folder: Folder
-    let sourcePath: [Int]
+    let items: [Folder]
+    let sourceContainerPath: [Int]
     let isCopy: Bool
     
-    init(folder: Folder, sourcePath: [Int], isCopy: Bool) {
-        self.folder = folder
-        self.sourcePath = sourcePath
+    init(items: [Folder], sourceContainerPath: [Int], isCopy: Bool) {
+        self.items = items
+        self.sourceContainerPath = sourceContainerPath
         self.isCopy = isCopy
     }
 }

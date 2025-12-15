@@ -18,17 +18,21 @@ struct NewFolderSheet: View {
     
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                TextField("Nombre de la carpeta", text: $name)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
+            VStack(spacing: 20) {
+                // Input Fields
+                VStack(spacing: 15) {
+                    TextField("Nombre del Elemento", text: $name)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                    
+                    Toggle("Agregar a Favoritos", isOn: $isFavorite)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
+                }
                 
-                Toggle("Agregar a Favoritos", isOn: $isFavorite)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(8)
-                
+                // Image Picker
                 Menu {
                     Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
                         Label("Tomar foto", systemImage: "camera.fill")
@@ -43,40 +47,42 @@ struct NewFolderSheet: View {
                         }
                     }
                 } label: {
-                    if let selectedImageData, let uiImage = UIImage(data: selectedImageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(height: 200)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else {
-                        HStack {
+                    HStack {
+                        if selectedImageData != nil {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Imagen Agregada")
+                                .foregroundStyle(.primary)
+                        } else {
                             Image(systemName: "photo")
-                            Text("Seleccionar Imagen")
+                                .foregroundStyle(.primary)
+                            Text("Agregar Imagen")
+                                .foregroundStyle(.primary)
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
                     }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(10)
                 }
                 
-                Spacer()
-                
+                // Creation Button
                 Button(action: {
                     viewModel.addRootFolder(name: name.isEmpty ? "Sin nombre" : name, isFavorite: isFavorite, imageData: selectedImageData)
                     isPresented = false
                 }) {
                     Text("Crear")
+                        .font(.headline)
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.blue)
                         .foregroundColor(.white)
-                        .cornerRadius(8)
+                        .cornerRadius(10)
                 }
+                .padding(.top, 10)
             }
-            .padding()
-            .navigationTitle("Nueva Carpeta")
+            .padding(20)
+            .navigationTitle("Nuevo Elemento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -92,5 +98,6 @@ struct NewFolderSheet: View {
                 }, sourceType: request.sourceType)
             }
         }
+        .presentationDetents([.fraction(0.45)])
     }
 }

@@ -9,6 +9,7 @@ internal import SwiftUI
 
 struct FoldersListView: View {
     @ObservedObject var viewModel: RandomitasViewModel
+    @Binding var navigationPath: NavigationPath
     
     var body: some View {
         List {
@@ -16,7 +17,8 @@ struct FoldersListView: View {
                 NavigationLink(destination: FolderDetailView(
                     folder: FolderWrapper(folder),
                     folderPath: [idx],
-                    viewModel: viewModel
+                    viewModel: viewModel,
+                    navigationPath: $navigationPath
                 )) {
                     HStack {
                         // Mostrar imagen si existe, sino mostrar ícono
@@ -27,7 +29,7 @@ struct FoldersListView: View {
                                 .frame(width: 30, height: 30)
                                 .cornerRadius(4)
                         } else {
-                            Image(systemName: "folder.fill")
+                            Image(systemName: "atom")
                                 .foregroundColor(.blue)
                         }
                         Text(folder.name)
