@@ -132,12 +132,6 @@ struct FolderDetailGalleryView: View {
                 Label("Renombrar", systemImage: "pencil")
             }
             Button {
-                isSelectionMode = true
-                selectedItemIds.insert(subfolder.id)
-            } label: {
-                Label("Seleccionar", systemImage: "checkmark.circle")
-            }
-            Button {
                 moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: false)
             } label: {
                 Label("Mover", systemImage: "arrow.turn.up.right")

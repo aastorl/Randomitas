@@ -53,7 +53,9 @@ class RandomitasViewModel: ObservableObject {
         do {
             let entities = try coreDataStack.context.fetch(request)
             // Ordenar por nombre para consistencia
-            let sorted = entities.sorted { ($0.name ?? "") < ($1.name ?? "") }
+            let sorted = entities.sorted {
+                self.sortName(for: $0.name ?? "").localizedStandardCompare(self.sortName(for: $1.name ?? "")) == .orderedAscending
+            }
             folders = sorted.map { convertToFolder($0) }
             print("Carpetas raíz cargadas: \(folders.count)")
         } catch {
@@ -77,7 +79,9 @@ class RandomitasViewModel: ObservableObject {
             // Deduplicate by Folder ID
             let uniqueFolderFavorites = Dictionary(grouping: allFolderFavorites, by: { $0.0.id })
                 .compactMap { $0.value.first }
-                .sorted { $0.0.name < $1.0.name }
+                .sorted {
+                    self.sortName(for: $0.0.name).localizedStandardCompare(self.sortName(for: $1.0.name)) == .orderedAscending
+                }
             
             folderFavorites = uniqueFolderFavorites
         } catch {
@@ -107,7 +111,9 @@ class RandomitasViewModel: ObservableObject {
                 .compactMap { $0.value.first }
             
             subfolders = uniqueSubfolders.map { convertToFolder($0) }
-                .sorted { $0.name < $1.name }
+                .sorted {
+                    self.sortName(for: $0.name).localizedStandardCompare(self.sortName(for: $1.name)) == .orderedAscending
+                }
             if !subfolders.isEmpty {
                 print("Subcarpetas encontradas en '\(entity.name ?? "")': \(subfolders.count)")
             }
@@ -258,7 +264,9 @@ class RandomitasViewModel: ObservableObject {
             for (step, i) in indices.dropFirst().enumerated() {
                 // Obtener y ordenar subcarpetas consistentemente
                 let subfoldersArray = (current.subfolders as? Set<FolderEntity>)?
-                    .sorted { ($0.name ?? "") < ($1.name ?? "") } ?? []
+                    .sorted {
+                        self.sortName(for: $0.name ?? "").localizedStandardCompare(self.sortName(for: $1.name ?? "")) == .orderedAscending
+                    } ?? []
                 
                 guard i < subfoldersArray.count else {
                     print("Subcarpeta en índice \(i) no encontrada (total: \(subfoldersArray.count))")
@@ -274,6 +282,15 @@ class RandomitasViewModel: ObservableObject {
             print("Error en getFolderEntity: \(error)")
             return nil
         }
+    }
+    
+    // Helper to normalize names for sorting
+    private func sortName(for name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.lowercased().hasPrefix("the ") {
+            return String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return trimmed
     }
     
     // MARK: - State Check
@@ -537,9 +554,13 @@ class RandomitasViewModel: ObservableObject {
     func sortFolders(_ folders: [Folder], by sortType: SortType) -> [Folder] {
         switch sortType {
         case .nameAsc:
-            return folders.sorted { $0.name < $1.name }
+            return folders.sorted {
+                self.sortName(for: $0.name).localizedStandardCompare(self.sortName(for: $1.name)) == .orderedAscending
+            }
         case .nameDesc:
-            return folders.sorted { $0.name > $1.name }
+            return folders.sorted {
+                self.sortName(for: $0.name).localizedStandardCompare(self.sortName(for: $1.name)) == .orderedDescending
+            }
         case .dateNewest:
             // Más reciente primero (fecha más nueva primero)
             return folders.sorted { $0.createdAt > $1.createdAt }
