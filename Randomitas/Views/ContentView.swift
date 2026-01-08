@@ -148,7 +148,8 @@ struct ContentView: View {
                     viewModel: viewModel,
                     isPresented: $showingFavorites,
                     navigateToFullPath: navigateToFullPath,
-                    highlightedItemId: $highlightedItemId
+                    highlightedItemId: $highlightedItemId,
+                    currentPath: .constant([])
                 )
             }
             .navigationDestination(for: FolderDestination.self) { destination in

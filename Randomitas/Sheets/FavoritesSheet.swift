@@ -12,6 +12,7 @@ struct FavoritesSheet: View {
     @Binding var isPresented: Bool
     var navigateToFullPath: ([Int]) -> Void
     @Binding var highlightedItemId: UUID?
+    @Binding var currentPath: [Int]
     
     var body: some View {
         NavigationStack {
@@ -22,8 +23,11 @@ struct FavoritesSheet: View {
                         ForEach(viewModel.folderFavorites, id: \.0.id) { fav in
                             Button(action: {
                                 highlightedItemId = fav.0.id
-                                let parentPath = Array(fav.1.dropLast())
-                                navigateToFullPath(parentPath)
+                                
+                                // Navegar directamente a la carpeta favorita
+                                let targetPath = fav.1
+                                
+                                navigateToFullPath(targetPath)
                                 isPresented = false
                             }) {
                                 HStack {

@@ -180,7 +180,8 @@ struct FolderDetailView: View {
                 viewModel: viewModel,
                 isPresented: $showingFavorites,
                 navigateToFullPath: navigateToFullPath,
-                highlightedItemId: $navigationHighlightedItemId
+                highlightedItemId: $navigationHighlightedItemId,
+                currentPath: .constant(folderPath)
             )
         }
         .sheet(isPresented: $showingHiddenFolders) {
