@@ -9,13 +9,12 @@ internal import SwiftUI
 
 struct FolderDetailGridView: View {
     @ObservedObject var viewModel: RandomitasViewModel
-    @ObservedObject var folder: FolderWrapper
+    // removed FolderWrapper
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
     
-    @Binding var editingId: UUID?
-    @Binding var editingName: String
-    var isEditing: FocusState<Bool>.Binding
+    
+    @Binding var editingElement: EditingInfo?
     
     @Binding var imagePickerRequest: ImagePickerRequest?
     @Binding var moveCopyOperation: MoveCopyOperation?
@@ -23,8 +22,12 @@ struct FolderDetailGridView: View {
     @Binding var isSelectionMode: Bool
     @Binding var navigationPath: NavigationPath
     @Binding var selectedItemIds: Set<UUID>
+    var onOpenSearch: (() -> Void)? = nil
 
     var highlightedItemId: UUID? // Added
+    
+    // Delete confirmation
+    @State private var folderToDelete: Folder?
     
     var body: some View {
         ScrollViewReader { proxy in
@@ -38,18 +41,15 @@ struct FolderDetailGridView: View {
                                     .overlay(
                                         ZStack {
                                             if isSelectionMode {
-                                                Color.black.opacity(selectedItemIds.contains(subfolder.id) ? 0.3 : 0.0)
-                                                    .cornerRadius(12)
                                                 VStack {
                                                     HStack {
                                                         Spacer()
                                                         Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
                                                             .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .white)
-                                                            .background(selectedItemIds.contains(subfolder.id) ? Color.white : Color.clear)
+                                                            .background(selectedItemIds.contains(subfolder.id) ? Color.white : Color.black.opacity(0.3))
                                                             .clipShape(Circle())
                                                             .font(.system(size: 24))
                                                             .padding(6)
-                                                            .shadow(radius: 2)
                                                     }
                                                     Spacer()
                                                 }
@@ -72,6 +72,11 @@ struct FolderDetailGridView: View {
                 .padding()
                 .padding(.bottom, 80)
             }
+            .refreshable {
+                await MainActor.run {
+                    onOpenSearch?()
+                }
+            }
             .onAppear {
                 if let id = highlightedItemId {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -82,13 +87,46 @@ struct FolderDetailGridView: View {
                 }
             }
         }
+        .alert("¿Eliminar este Elemento?", isPresented: Binding(
+            get: { folderToDelete != nil },
+            set: { if !$0 { folderToDelete = nil } }
+        )) {
+            Button("Cancelar", role: .cancel) {
+                folderToDelete = nil
+            }
+            Button("Eliminar", role: .destructive) {
+                if let folder = folderToDelete {
+                    HapticManager.warning()
+                    if folderPath.isEmpty {
+                        viewModel.deleteRootFolder(id: folder.id)
+                    } else {
+                        viewModel.deleteSubfolder(id: folder.id, from: folderPath)
+                    }
+                    folderToDelete = nil
+                }
+            }
+        } message: {
+            if let folder = folderToDelete {
+                Text("Se eliminará \"\(folder.name)\" permanentemente.")
+            }
+        }
     }
     
     @ViewBuilder
     private func gridFolderCell(_ subfolder: Folder) -> some View {
-        let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-        NavigationLink(destination: FolderDetailView(
-            folder: FolderWrapper(subfolder),
+        let idx: Int
+        if folderPath.isEmpty {
+            idx = viewModel.folders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+        } else {
+             if let parent = viewModel.getFolderFromPath(folderPath) {
+                 idx = parent.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+             } else {
+                 idx = 0
+             }
+        }
+        
+        return NavigationLink(destination: FolderDetailView(
+            folder: subfolder,
             folderPath: folderPath + [idx],
             viewModel: viewModel,
             navigationPath: $navigationPath
@@ -133,25 +171,12 @@ struct FolderDetailGridView: View {
                 )
                 .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                 
-                if editingId == subfolder.id {
-                    TextField("Nombre", text: $editingName)
-                        .focused(isEditing)
-                        .onSubmit {
-                            viewModel.renameFolder(id: subfolder.id, newName: editingName)
-                            editingId = nil
-                        }
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                        .frame(height: 35, alignment: .top)
-                } else {
-                    Text(subfolder.name)
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .lineLimit(2)
-                        .multilineTextAlignment(.center)
-                        .foregroundColor(.primary)
-                        .frame(height: 35, alignment: .top)
-                }
+                Text(subfolder.name)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .foregroundColor(.primary)
+                    .frame(height: 35, alignment: .top)
             }
         }
         .disabled(isSelectionMode)
@@ -160,34 +185,24 @@ struct FolderDetailGridView: View {
                 Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
             }
             Button {
-                editingId = subfolder.id
-                editingName = subfolder.name
-                isEditing.wrappedValue = true
-            } label: {
-                Label("Renombrar", systemImage: "pencil")
-            }
-            Button {
                 isSelectionMode = true
                 selectedItemIds.insert(subfolder.id)
             } label: {
                 Label("Seleccionar", systemImage: "checkmark.circle")
             }
             Button {
-                moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: false)
+                editingElement = EditingInfo(folder: subfolder, path: folderPath + [idx])
             } label: {
-                Label("Mover", systemImage: "arrow.turn.up.right")
-            }
-            Button {
-                moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: true)
-            } label: {
-                Label("Copiar", systemImage: "doc.on.doc")
+                Label("Editar", systemImage: "pencil")
             }
             Button {
                 viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [idx])
             } label: {
                 Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
             }
-            Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath) } label: {
+            Button(role: .destructive) {
+                folderToDelete = subfolder
+            } label: {
                 Label("Eliminar", systemImage: "trash")
             }
         }

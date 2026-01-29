@@ -12,18 +12,21 @@ struct HiddenFoldersSheet: View {
     @Binding var isPresented: Bool
     var navigateToFullPath: ([Int]) -> Void
     @Binding var highlightedItemId: UUID?
-    @State private var hiddenFolders: [(folder: Folder, path: [Int])] = []
+    
+    // Computed property - reactivo a cambios en viewModel.folders
+    private var hiddenFolders: [(folder: Folder, path: [Int])] {
+        viewModel.getHiddenFolders()
+    }
     
     var body: some View {
         NavigationStack {
             List {
                 if !hiddenFolders.isEmpty {
-                    Section(header: Text("Elementos Ocultos")) {
+                    Section() {
                         ForEach(Array(hiddenFolders.enumerated()), id: \.element.folder.id) { index, item in
                             Button(action: {
                                 highlightedItemId = item.folder.id
-                                let parentPath = Array(item.path.dropLast())
-                                navigateToFullPath(parentPath)
+                                navigateToFullPath(item.path)
                                 isPresented = false
                             }) {
                                 HStack {
@@ -44,8 +47,9 @@ struct HiddenFoldersSheet: View {
                             }
                         }
                         .onDelete { indices in
-                            viewModel.removeHiddenFolders(at: indices, from: hiddenFolders)
-                            hiddenFolders = viewModel.getHiddenFolders()
+                            // Necesitamos capturar los folders actuales antes de borrar
+                            let currentHiddenFolders = hiddenFolders
+                            viewModel.removeHiddenFolders(at: indices, from: currentHiddenFolders)
                         }
                     }
                 }
@@ -55,7 +59,7 @@ struct HiddenFoldersSheet: View {
                         .foregroundColor(.gray)
                 }
             }
-            .navigationTitle("Elementos Ocultas")
+            .navigationTitle("Elementos Ocultos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -64,9 +68,7 @@ struct HiddenFoldersSheet: View {
                     }
                 }
             }
-            .onAppear {
-                hiddenFolders = viewModel.getHiddenFolders()
-            }
         }
     }
 }
+

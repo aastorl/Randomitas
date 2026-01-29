@@ -12,6 +12,12 @@ internal import SwiftUI
 
 class RandomitasViewModel: ObservableObject {
     @Published var folders: [Folder] = []
+    
+    // Virtual Root Folder for Unified Architecture
+    var rootFolder: Folder {
+        Folder(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "Randomitas", subfolders: folders, imageData: nil, createdAt: Date(), isHidden: false)
+    }
+    
     @Published var folderFavorites: [(FolderReference, [Int])] = []
     @Published var history: [HistoryEntry] = []
     @Published var viewType: ViewType = .list
@@ -42,8 +48,8 @@ class RandomitasViewModel: ObservableObject {
         loadFolderFavorites()
         loadHistory()
         
-        // Limpieza única de subcarpetas ocultas (puedes comentar esto después de la primera ejecución)
-        cleanAllHiddenSubfolders()
+        // Limpieza deshabilitada - causaba que los elementos ocultos se borraran al reiniciar
+        // cleanAllHiddenSubfolders()
     }
     
     private func loadFolders() {
@@ -96,7 +102,11 @@ class RandomitasViewModel: ObservableObject {
             let entities = try coreDataStack.context.fetch(request)
             history = entities.compactMap {
                 guard let id = $0.id, let name = $0.itemName, let path = $0.path, let ts = $0.timestamp else { return nil }
-                return HistoryEntry(id: id, itemName: name, path: path, timestamp: ts)
+                // Provide default values for old entries without new fields
+                let itemId = $0.itemId ?? UUID()
+                let folderPathData = $0.folderPath
+                let folderPath: [Int] = folderPathData.flatMap { try? JSONDecoder().decode([Int].self, from: $0) } ?? []
+                return HistoryEntry(id: id, itemId: itemId, itemName: name, path: path, folderPath: folderPath, timestamp: ts)
             }
         } catch {
             print("Error: \(error)")
@@ -133,7 +143,8 @@ class RandomitasViewModel: ObservableObject {
     // MARK: - Folders
     func addRootFolder(name: String, isFavorite: Bool = false, imageData: Data? = nil) {
         let folder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
-        folder.id = UUID()
+        let newFolderId = UUID() // Guardar el UUID antes de cualquier refresh
+        folder.id = newFolderId
         folder.name = name
         folder.imageData = imageData
         folder.createdAt = Date()
@@ -141,12 +152,11 @@ class RandomitasViewModel: ObservableObject {
         coreDataStack.save()
         
         if isFavorite {
-            // Para carpetas raíz, el path es simplemente el índice en el array de folders.
-            // Pero necesitamos recargar folders primero para saber el índice.
             coreDataStack.refresh()
             loadFolders()
             
-            if let index = folders.firstIndex(where: { $0.id == folder.id }) {
+            // Usar newFolderId en vez de folder.id (que se invalida después del refresh)
+            if let index = folders.firstIndex(where: { $0.id == newFolderId }) {
                 toggleFolderFavorite(folder: folders[index], path: [index])
             }
         } else {
@@ -178,7 +188,8 @@ class RandomitasViewModel: ObservableObject {
         print("Creando subcarpeta '\(name)' en '\(parent.name ?? "sin nombre")'")
         
         let subfolder = NSEntityDescription.insertNewObject(forEntityName: "FolderEntity", into: coreDataStack.context) as! FolderEntity
-        subfolder.id = UUID()
+        let newFolderId = UUID() // Guardar el UUID antes de cualquier refresh
+        subfolder.id = newFolderId
         subfolder.name = name
         subfolder.parent = parent
         subfolder.imageData = imageData
@@ -192,13 +203,13 @@ class RandomitasViewModel: ObservableObject {
             loadFolders()
             
             // Reconstruir el path para la nueva subcarpeta
-            // Esto es complejo porque necesitamos encontrar el índice de la nueva subcarpeta
+            // Usamos newFolderId (guardado antes del refresh) en lugar de subfolder.id
             if let parentFolder = getFolderAtPath(folderPath) {
-                if let subIndex = parentFolder.subfolders.firstIndex(where: { $0.id == subfolder.id }) {
+                if let subIndex = parentFolder.subfolders.firstIndex(where: { $0.id == newFolderId }) {
                     var newPath = folderPath
                     newPath.append(subIndex)
-                    // Necesitamos pasar el objeto Folder struct, no la entidad
                     if let newFolder = getFolderAtPath(newPath) {
+                        print("Agregando '\(newFolder.name)' a favoritos con path \(newPath)")
                         toggleFolderFavorite(folder: newFolder, path: newPath)
                     }
                 }
@@ -365,42 +376,11 @@ class RandomitasViewModel: ObservableObject {
     }
     
     private func setFolderHidden(entity: FolderEntity, isHidden: Bool) {
-        // Solo marcar la carpeta actual, NO las subcarpetas
+        // Solo marcar la carpeta actual, NO tocar las subcarpetas
         entity.isHidden = isHidden
-        
-        // Si estamos ocultando, limpiar el estado de las subcarpetas
-        // Si estamos mostrando, también limpiar las subcarpetas
-        cleanSubfoldersHiddenState(entity: entity)
+        // Las subcarpetas mantienen su propio estado isHidden independientemente
     }
-    
-    // Limpiar recursivamente el estado isHidden de todas las subcarpetas
-    private func cleanSubfoldersHiddenState(entity: FolderEntity) {
-        if let subfolders = entity.subfolders as? Set<FolderEntity> {
-            subfolders.forEach { subfolder in
-                subfolder.isHidden = false
-                cleanSubfoldersHiddenState(entity: subfolder)
-            }
-        }
-    }
-    
-    // Utilidad para limpiar todas las subcarpetas ocultas existentes (llamar una vez)
-    func cleanAllHiddenSubfolders() {
-        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
-        request.predicate = NSPredicate(format: "parent == nil")
-        
-        do {
-            let rootFolders = try coreDataStack.context.fetch(request)
-            rootFolders.forEach { rootFolder in
-                cleanSubfoldersHiddenState(entity: rootFolder)
-            }
-            coreDataStack.save()
-            coreDataStack.refresh()
-            loadFolders()
-            print("Limpieza de subcarpetas ocultas completada")
-        } catch {
-            print("Error limpiando subcarpetas: \(error)")
-        }
-    }
+
     
     // Verificar si una carpeta o alguno de sus ancestros está oculto
     func isHiddenOrHasHiddenAncestor(at path: [Int]) -> Bool {
@@ -464,13 +444,14 @@ class RandomitasViewModel: ObservableObject {
         coreDataStack.refresh()
         loadFolders()
     }
-    
     // MARK: - History
     private func saveHistory(_ entry: HistoryEntry) {
         let hist = NSEntityDescription.insertNewObject(forEntityName: "HistoryEntity", into: coreDataStack.context) as! HistoryEntity
         hist.id = entry.id
+        hist.itemId = entry.itemId
         hist.itemName = entry.itemName
         hist.path = entry.path
+        hist.folderPath = try? JSONEncoder().encode(entry.folderPath)
         hist.timestamp = entry.timestamp
         history.append(entry)
         coreDataStack.save()
@@ -486,6 +467,20 @@ class RandomitasViewModel: ObservableObject {
             old.forEach { coreDataStack.context.delete($0) }
             coreDataStack.save()
             history.removeAll { $0.timestamp < cutoff }
+        } catch {
+            print("Error: \(error)")
+        }
+    }
+    
+    func removeHistoryEntry(id: UUID) {
+        let request = NSFetchRequest<HistoryEntity>(entityName: "HistoryEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        do {
+            if let entity = try coreDataStack.context.fetch(request).first {
+                coreDataStack.context.delete(entity)
+                coreDataStack.save()
+                history.removeAll { $0.id == id }
+            }
         } catch {
             print("Error: \(error)")
         }
@@ -587,6 +582,38 @@ class RandomitasViewModel: ObservableObject {
     
     // MARK: - Move & Copy
 
+    // Nueva versión que usa ID del destino (más seguro para operaciones batch)
+    func moveFolderById(id: UUID, toFolderId targetFolderId: UUID?) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let folder = try coreDataStack.context.fetch(request).first {
+                if let targetId = targetFolderId {
+                    // Buscar carpeta destino por ID
+                    let targetRequest = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+                    targetRequest.predicate = NSPredicate(format: "id == %@", targetId as CVarArg)
+                    
+                    if let targetFolder = try coreDataStack.context.fetch(targetRequest).first {
+                        folder.parent = targetFolder
+                    } else {
+                        print("Error: Target folder with id \(targetId) not found")
+                        return
+                    }
+                } else {
+                    // Mover a root
+                    folder.parent = nil
+                }
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+            }
+        } catch {
+            print("Error moving folder: \(error)")
+        }
+    }
+    
+    // Versión original (para compatibilidad) - ahora solo recarga al final
     func moveFolder(id: UUID, to targetFolderPath: [Int]) {
         let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
         request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
@@ -598,6 +625,8 @@ class RandomitasViewModel: ObservableObject {
                 } else {
                     if let targetFolder = getFolderEntity(at: targetFolderPath) {
                         folder.parent = targetFolder
+                    } else {
+                        return
                     }
                 }
                 coreDataStack.save()
@@ -606,6 +635,32 @@ class RandomitasViewModel: ObservableObject {
             }
         } catch {
             print("Error moving folder: \(error)")
+        }
+    }
+    
+    // Nueva versión que usa ID del destino (más seguro para operaciones batch)
+    func copyFolderById(id: UUID, toFolderId targetFolderId: UUID?) {
+        let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+        request.predicate = NSPredicate(format: "id == %@", id as CVarArg)
+        
+        do {
+            if let originalFolder = try coreDataStack.context.fetch(request).first {
+                var targetParent: FolderEntity? = nil
+                
+                if let targetId = targetFolderId {
+                    let targetRequest = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")
+                    targetRequest.predicate = NSPredicate(format: "id == %@", targetId as CVarArg)
+                    targetParent = try coreDataStack.context.fetch(targetRequest).first
+                }
+                
+                copyFolderRecursive(original: originalFolder, parent: targetParent)
+                
+                coreDataStack.save()
+                coreDataStack.refresh()
+                loadFolders()
+            }
+        } catch {
+            print("Error copying folder: \(error)")
         }
     }
     
@@ -715,7 +770,6 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // MARK: - Search
-    // MARK: - Search
     func getReversedPathString(for path: [Int]) -> String {
         var names = ["Randomitas"]
         var currentLevelFolders = folders
@@ -758,12 +812,7 @@ class RandomitasViewModel: ObservableObject {
             }
         }
         
-        searchRecursive(folders: folders, currentPath: [], parentNames: ["Randomitas"]) // Start with Root name if desired, or empty? 
-        // User said "igual que History", which shows Root.
-        // If I pass ["Randomitas"], then a top-level folder "Folder A" will have parent "Randomitas".
-        // Path string: "Randomitas".
-        // Display: "< Randomitas".
-        // Sounds correct.
+        searchRecursive(folders: folders, currentPath: [], parentNames: ["Randomitas"])
         return foundFolders
     }
     
@@ -803,7 +852,7 @@ class RandomitasViewModel: ObservableObject {
         // Save to history
         // Use dropLast() to exclude the current folder name from the path string
         let pathString = getFolderPathString(for: Array(resultPath.dropLast()))
-        let entry = HistoryEntry(itemName: selectedFolder.name, path: pathString)
+        let entry = HistoryEntry(itemId: selectedFolder.id, itemName: selectedFolder.name, path: pathString, folderPath: resultPath)
         saveHistory(entry)
         
         return (selectedFolder, resultPath)
@@ -833,7 +882,7 @@ class RandomitasViewModel: ObservableObject {
         // Save to history
         // Use dropLast() to exclude the current folder name from the path string
         let pathString = getFolderPathString(for: Array(selected.path.dropLast()))
-        let entry = HistoryEntry(itemName: selected.folder.name, path: pathString)
+        let entry = HistoryEntry(itemId: selected.folder.id, itemName: selected.folder.name, path: pathString, folderPath: selected.path)
         saveHistory(entry)
         
         return selected
@@ -857,7 +906,7 @@ class RandomitasViewModel: ObservableObject {
         // Save to history
         // Use dropLast() to exclude the current folder name from the path string
         let pathString = getFolderPathString(for: Array(selected.path.dropLast()))
-        let entry = HistoryEntry(itemName: selected.folder.name, path: pathString)
+        let entry = HistoryEntry(itemId: selected.folder.id, itemName: selected.folder.name, path: pathString, folderPath: selected.path)
         saveHistory(entry)
         
         return selected

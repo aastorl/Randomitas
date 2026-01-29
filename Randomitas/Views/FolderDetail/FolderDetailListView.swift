@@ -9,21 +9,25 @@ internal import SwiftUI
 
 struct FolderDetailListView: View {
     @ObservedObject var viewModel: RandomitasViewModel
-    @ObservedObject var folder: FolderWrapper
+    // removed @ObservedObject var folder: FolderWrapper - not needed if we rely on sortedSubfolders + path
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
     
-    @Binding var editingId: UUID?
-    @Binding var editingName: String
-    var isEditing: FocusState<Bool>.Binding
     
-    @State private var subfolderToDelete: UUID?
+    @Binding var editingElement: EditingInfo?
+    
+    // Undo delete state
+    @State private var deletedFolder: Folder?
+    @State private var showUndoSnackbar = false
+    @State private var undoTimer: Timer?
+    
     @Binding var imagePickerRequest: ImagePickerRequest?
     @Binding var moveCopyOperation: MoveCopyOperation?
     
     @Binding var isSelectionMode: Bool
     @Binding var navigationPath: NavigationPath
     @Binding var selectedItemIds: Set<UUID>
+    var onOpenSearch: (() -> Void)? = nil
 
     var highlightedItemId: UUID?
     
@@ -31,7 +35,7 @@ struct FolderDetailListView: View {
     
     var body: some View {
         ScrollViewReader { proxy in
-            List(selection: $selectedItemIds) {
+            List {
                 if !sortedSubfolders.isEmpty {
                     ForEach(sortedSubfolders, id: \.id) { subfolder in
                         subfolderRow(subfolder)
@@ -43,7 +47,11 @@ struct FolderDetailListView: View {
                     Text("Vacío").foregroundColor(.gray)
                 }
             }
-            .environment(\.editMode, .constant(isSelectionMode ? .active : .inactive))
+            .refreshable {
+                await MainActor.run {
+                    onOpenSearch?()
+                }
+            }
             .onAppear {
                 if let id = highlightedItemId {
                     withAnimation {
@@ -55,25 +63,108 @@ struct FolderDetailListView: View {
         .safeAreaInset(edge: .bottom) {
             Color.clear.frame(height: 80)
         }
-        .alert("¿Seguro quieres eliminar este Elemento?", isPresented: .constant(subfolderToDelete != nil)) {
-            Button("Cancelar", role: .cancel) {
-                subfolderToDelete = nil
-            }
-            Button("Eliminar", role: .destructive) {
-                if let id = subfolderToDelete {
-                    viewModel.deleteSubfolder(id: id, from: folderPath)
-                    subfolderToDelete = nil
+        .overlay(alignment: .bottom) {
+            // Undo Snackbar
+            if showUndoSnackbar, let folder = deletedFolder {
+                HStack {
+                    Text("\"\(folder.name)\" eliminado")
+                        .foregroundColor(.white)
+                        .font(.system(size: 14, weight: .medium))
+                    
+                    Spacer()
+                    
+                    Button("Deshacer") {
+                        undoDelete()
+                    }
+                    .foregroundColor(.yellow)
+                    .font(.system(size: 14, weight: .bold))
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                .background(Color.black.opacity(0.85))
+                .cornerRadius(10)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 100)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+        }
+        .animation(.spring(response: 0.3), value: showUndoSnackbar)
+    }
+    
+    // MARK: - Undo Logic
+    
+    private func deleteWithUndo(_ folder: Folder) {
+        // Cancel any existing timer
+        undoTimer?.invalidate()
+        
+        // Store the folder for potential undo
+        deletedFolder = folder
+        
+        // Delete immediately
+        HapticManager.warning()
+        if folderPath.isEmpty {
+            viewModel.deleteRootFolder(id: folder.id)
+        } else {
+            viewModel.deleteSubfolder(id: folder.id, from: folderPath)
+        }
+        
+        // Show snackbar
+        withAnimation {
+            showUndoSnackbar = true
+        }
+        
+        // Start timer to hide snackbar after 4 seconds
+        undoTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
+            withAnimation {
+                showUndoSnackbar = false
+                deletedFolder = nil
+            }
+        }
+    }
+    
+    private func undoDelete() {
+        guard let folder = deletedFolder else { return }
+        
+        // Cancel timer
+        undoTimer?.invalidate()
+        
+        // Re-add the folder
+        if folderPath.isEmpty {
+            viewModel.addRootFolder(name: folder.name, isFavorite: false, imageData: folder.imageData)
+        } else {
+            viewModel.addSubfolder(name: folder.name, to: folderPath, isFavorite: false, imageData: folder.imageData)
+        }
+        
+        HapticManager.success()
+        
+        // Hide snackbar
+        withAnimation {
+            showUndoSnackbar = false
+            deletedFolder = nil
         }
     }
     
     @ViewBuilder
     private func subfolderRow(_ subfolder: Folder) -> some View {
-        let idx = folder.folder.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-        ZStack(alignment: .leading) {
+        // Calculate index strictly from the current list context? 
+        // We know `subfolder` is inside the current folder (at folderPath).
+        // If folderPath is empty (Root), we find index in viewModel.folders.
+        // If folderPath is not empty, we find index in getFolderAtPath(folderPath).subfolders.
+        
+        let idx: Int
+        if folderPath.isEmpty {
+            idx = viewModel.folders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+        } else {
+             if let parent = viewModel.getFolderFromPath(folderPath) {
+                 idx = parent.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+             } else {
+                 idx = 0
+             }
+        }
+        
+        return ZStack(alignment: .leading) {
             NavigationLink(destination: FolderDetailView(
-                folder: FolderWrapper(subfolder),
+                folder: subfolder,
                 folderPath: folderPath + [idx],
                 viewModel: viewModel,
                 navigationPath: $navigationPath
@@ -84,20 +175,18 @@ struct FolderDetailListView: View {
             .disabled(isSelectionMode)
             
             HStack(spacing: 12) {
+                // Selection checkmark (left side)
+                if isSelectionMode {
+                    Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .gray)
+                        .font(.system(size: 22))
+                }
+                
                 Image(systemName: "atom")
                     .foregroundColor(.blue)
                     .frame(width: 40, height: 40)
                 
-                if editingId == subfolder.id {
-                    TextField("Nombre", text: $editingName)
-                        .focused(isEditing)
-                        .onSubmit {
-                            viewModel.renameFolder(id: subfolder.id, newName: editingName)
-                            editingId = nil
-                        }
-                } else {
-                    Text(subfolder.name)
-                }
+                Text(subfolder.name)
                 
                 // Icono para carpetas ocultas
                 if subfolder.isHidden {
@@ -109,19 +198,35 @@ struct FolderDetailListView: View {
                 Spacer()
                 
                 // Indicador de navegación personalizado
-                if subfolder.subfolders.isEmpty {
-                    Image(systemName: "chevron.right")
-                        .foregroundColor(Color(.systemGray3))
-                        .font(.system(size: 14, weight: .semibold))
-                } else {
-                    Image(systemName: "arrow.right")
-                        .foregroundColor(Color(.systemGray3))
-                        .font(.system(size: 14, weight: .semibold))
+                if !isSelectionMode {
+                    if subfolder.subfolders.isEmpty {
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(Color(.systemGray3))
+                            .font(.system(size: 14, weight: .semibold))
+                    } else {
+                        Image(systemName: "arrow.right")
+                            .foregroundColor(Color(.systemGray3))
+                            .font(.system(size: 14, weight: .semibold))
+                    }
                 }
             }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                if isSelectionMode {
+                    if selectedItemIds.contains(subfolder.id) {
+                        selectedItemIds.remove(subfolder.id)
+                    } else {
+                        selectedItemIds.insert(subfolder.id)
+                    }
+                }
+            }
+            .allowsHitTesting(isSelectionMode)
         }
+        .listRowBackground(isSelectionMode ? Color(.systemBackground) : nil)
         .swipeActions(edge: .trailing) {
-            Button(role: .destructive) { subfolderToDelete = subfolder.id } label: {
+            Button(role: .destructive) {
+                deleteWithUndo(subfolder)
+            } label: {
                 Label("Eliminar", systemImage: "trash")
             }
         }
@@ -130,34 +235,24 @@ struct FolderDetailListView: View {
                 Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
             }
             Button {
-                editingId = subfolder.id
-                editingName = subfolder.name
-                isEditing.wrappedValue = true
-            } label: {
-                Label("Renombrar", systemImage: "pencil")
-            }
-            Button {
                 isSelectionMode = true
                 selectedItemIds.insert(subfolder.id)
             } label: {
                 Label("Seleccionar", systemImage: "checkmark.circle")
             }
             Button {
-                moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: false)
+                editingElement = EditingInfo(folder: subfolder, path: folderPath + [idx])
             } label: {
-                Label("Mover", systemImage: "arrow.turn.up.right")
-            }
-            Button {
-                moveCopyOperation = MoveCopyOperation(items: [subfolder], sourceContainerPath: folderPath, isCopy: true)
-            } label: {
-                Label("Copiar", systemImage: "doc.on.doc")
+                Label("Editar", systemImage: "pencil")
             }
             Button {
                 viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [idx])
             } label: {
                 Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
             }
-            Button(role: .destructive) { viewModel.deleteSubfolder(id: subfolder.id, from: folderPath) } label: {
+            Button(role: .destructive) {
+                deleteWithUndo(subfolder)
+            } label: {
                 Label("Eliminar", systemImage: "trash")
             }
         }

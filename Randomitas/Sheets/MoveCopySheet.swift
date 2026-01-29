@@ -26,6 +26,9 @@ struct MoveCopySheet: View {
     @State private var showingErrorAlert = false
     @State private var errorMessage = ""
     @State private var showingReplaceAlert = false
+    
+    // New Element Sheet
+    @State private var showingNewFolderSheet = false
     @State private var conflictingFolders: [Folder] = []
     
     // MEMORIA TEMPORAL: Solo recuerda si fue hace menos de 2 minutos
@@ -38,6 +41,29 @@ struct MoveCopySheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Header informativo
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Image(systemName: isCopy ? "doc.on.doc.fill" : "arrow.turn.up.right")
+                            .font(.system(size: 28))
+                            .foregroundColor(isCopy ? .green : .blue)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(foldersToMove.count) elemento\(foldersToMove.count > 1 ? "s" : "")")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text("Selecciona el destino")
+                                .font(.system(size: 13))
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .background(Color(.systemGray6))
+                }
+                
+                Divider()
+                
                 ScrollView {
                     VStack(alignment: .leading, spacing: 5) {
                         // Root Node as part of tree
@@ -75,7 +101,7 @@ struct MoveCopySheet: View {
                                     }
                                 }
                             }
-                            .padding(.vertical, 8)
+                            .padding(.vertical, 10)
                             .padding(.horizontal, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
@@ -102,28 +128,56 @@ struct MoveCopySheet: View {
                             }
                         }
                     }
-                    .padding(.vertical)
+                    .padding(.vertical, 12)
                 }
                 
-                // Action Bar
-                VStack {
+                // Action Bar - Refinada
+                VStack(spacing: 0) {
                     Divider()
-                    HStack {
-                        Button("Cancelar") { isPresented = false }
-                            .foregroundColor(.red)
-                        Spacer()
-                        Button(action: validateAndPerformAction) {
-                            Text(isCopy ? "Copiar aquí" : "Mover aquí")
-                                .fontWeight(.bold)
-                                .padding(.horizontal, 20)
+                    
+                    HStack(spacing: 0) {
+                        // Cancelar (izquierda)
+                        Button(action: { isPresented = false }) {
+                            Text("Cancelar")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                        }
+                        
+                        // Divider vertical
+                        Rectangle()
+                            .fill(Color(.systemGray4))
+                            .frame(width: 1)
+                            .padding(.vertical, 8)
+                        
+                        // + (centro)
+                        Button(action: { showingNewFolderSheet = true }) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.system(size: 26))
+                                .foregroundColor(isRootSelected || selectedTargetFolder != nil ? .blue : Color(.systemGray3))
+                                .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
-                                .background(isActionDisabled ? Color.gray : Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(8)
+                        }
+                        .disabled(!isRootSelected && selectedTargetFolder == nil)
+                        
+                        // Divider vertical
+                        Rectangle()
+                            .fill(Color(.systemGray4))
+                            .frame(width: 1)
+                            .padding(.vertical, 8)
+                        
+                        // Acción (derecha)
+                        Button(action: validateAndPerformAction) {
+                            Text(isCopy ? "Copiar" : "Mover")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(isActionDisabled ? Color(.systemGray3) : (isCopy ? .green : .blue))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
                         }
                         .disabled(isActionDisabled)
                     }
-                    .padding()
+                    .frame(height: 50)
                     .background(Color(.systemBackground))
                 }
             }
@@ -158,6 +212,13 @@ struct MoveCopySheet: View {
                     Text("Ya existen \(conflictingFolders.count) Elementos con los mismos nombres. ¿Quieres reemplazarlos?")
                 }
             }
+            .sheet(isPresented: $showingNewFolderSheet) {
+                NewFolderSheet(
+                    viewModel: viewModel,
+                    folderPath: calculateNewFolderPath(),
+                    isPresented: $showingNewFolderSheet
+                )
+            }
         }
     }
     
@@ -175,6 +236,7 @@ struct MoveCopySheet: View {
     // MARK: - Logic
     
     private func selectRoot() {
+        HapticManager.selection()
         if isRootSelected {
             isRootSelected = false
         } else {
@@ -298,6 +360,28 @@ struct MoveCopySheet: View {
         return findPath(for: folder.id, in: viewModel.folders) ?? []
     }
     
+    // Calcula el path para NewFolderSheet
+    // Retorna nil si debe crear en root, o el path completo si es subcarpeta
+    private func calculateNewFolderPath() -> [Int]? {
+        // Si root está seleccionado, crear en nivel raíz
+        if isRootSelected {
+            return nil
+        }
+        
+        // Si hay una carpeta seleccionada, calcular su path
+        guard let folder = selectedTargetFolder else {
+            return nil
+        }
+        
+        // Buscar el path de la carpeta seleccionada
+        if let path = findPath(for: folder.id, in: viewModel.folders), !path.isEmpty {
+            return path
+        }
+        
+        // Si no se encuentra el path, crear en root como fallback
+        return nil
+    }
+    
     private func findPath(for id: UUID, in folders: [Folder]) -> [Int]? {
         for (index, folder) in folders.enumerated() {
             if folder.id == id {
@@ -358,13 +442,17 @@ struct MoveCopySheet: View {
         // 🆕 GUARDAR ubicación y timestamp
         saveLastTargetLocation(targetPath: targetPath)
         
+        // Usar el ID del destino en vez del path para evitar problemas con índices que cambian
+        let targetFolderId: UUID? = isRootSelected ? nil : selectedTargetFolder?.id
+        
         for folder in foldersToMove {
-             if isCopy {
-                 viewModel.copyFolder(id: folder.id, to: targetPath)
-             } else {
-                 viewModel.moveFolder(id: folder.id, to: targetPath)
-             }
+            if isCopy {
+                viewModel.copyFolderById(id: folder.id, toFolderId: targetFolderId)
+            } else {
+                viewModel.moveFolderById(id: folder.id, toFolderId: targetFolderId)
+            }
         }
+        HapticManager.success()
         onSuccess?()
         isPresented = false
     }
@@ -465,6 +553,7 @@ struct FolderTreeNode: View {
     
     private func selectThis() {
         if !isDisabled {
+            HapticManager.selection()
             if selectedFolder?.id == folder.id {
                 selectedFolder = nil
             } else {

@@ -136,6 +136,7 @@ struct ResultSheet: View {
                                 HStack(spacing: 12) {
                                 // Favorito
                                 Button(action: {
+                                    HapticManager.lightImpact()
                                     isFavorite.toggle()
                                     viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
                                 }) {
@@ -187,6 +188,7 @@ struct ResultSheet: View {
                                 
                                 // Abrir Carpeta
                                 Button(action: {
+                                    HapticManager.mediumImpact()
                                     highlightedItemId = currentFolder.id
                                     navigateToFullPath(path)
                                     isPresented = false
@@ -208,7 +210,24 @@ struct ResultSheet: View {
                     }
                 }
             }
-            .sheet(item: $imagePickerRequest) { request in
+            // Camera - fullscreen cover
+            .fullScreenCover(item: Binding(
+                get: { imagePickerRequest?.isFullScreen == true ? imagePickerRequest : nil },
+                set: { imagePickerRequest = $0 }
+            )) { request in
+                ImagePickerView(onImagePicked: { image in
+                    let resizedImage = image.resized(toMaxDimension: 1024)
+                    if let data = resizedImage.jpegData(compressionQuality: 0.8) {
+                        viewModel.updateFolderImage(imageData: data, at: path)
+                    }
+                }, sourceType: request.sourceType)
+                .ignoresSafeArea()
+            }
+            // Photo Library - sheet
+            .sheet(item: Binding(
+                get: { imagePickerRequest?.isFullScreen == false ? imagePickerRequest : nil },
+                set: { imagePickerRequest = $0 }
+            )) { request in
                 ImagePickerView(onImagePicked: { image in
                     let resizedImage = image.resized(toMaxDimension: 1024)
                     if let data = resizedImage.jpegData(compressionQuality: 0.8) {

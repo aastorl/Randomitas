@@ -14,13 +14,24 @@ struct FavoritesSheet: View {
     @Binding var highlightedItemId: UUID?
     @Binding var currentPath: [Int]
     
+    // Computed property - filtra favoritos que aún existen
+    private var validFavorites: [(FolderReference, [Int])] {
+        viewModel.folderFavorites.filter { fav in
+            // Verificar que el folder aún existe en el path indicado
+            if let folder = viewModel.getFolderFromPath(fav.1) {
+                return folder.id == fav.0.id
+            }
+            return false
+        }
+    }
+    
     var body: some View {
         NavigationStack {
             List {
                 // Carpetas Favoritas
-                if !viewModel.folderFavorites.isEmpty {
+                if !validFavorites.isEmpty {
                     Section(header: Text("")) {
-                        ForEach(viewModel.folderFavorites, id: \.0.id) { fav in
+                        ForEach(validFavorites, id: \.0.id) { fav in
                             Button(action: {
                                 highlightedItemId = fav.0.id
                                 
@@ -48,12 +59,21 @@ struct FavoritesSheet: View {
                             }
                         }
                         .onDelete { indices in
-                            viewModel.removeFolderFavorites(at: indices)
+                            // Necesitamos mapear los índices de validFavorites a folderFavorites
+                            let validFavs = validFavorites
+                            let idsToRemove = indices.map { validFavs[$0].0.id }
+                            
+                            // Encontrar los índices reales en folderFavorites
+                            let realIndices = IndexSet(viewModel.folderFavorites.enumerated()
+                                .filter { idsToRemove.contains($0.element.0.id) }
+                                .map { $0.offset })
+                            
+                            viewModel.removeFolderFavorites(at: realIndices)
                         }
                     }
                 }
                 
-                if viewModel.folderFavorites.isEmpty {
+                if validFavorites.isEmpty {
                     Text("Sin Elementos Favoritos")
                         .foregroundColor(.gray)
                 }
