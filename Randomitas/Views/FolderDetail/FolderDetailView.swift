@@ -111,12 +111,17 @@ struct FolderDetailView: View {
                 // CONTENT with optional blur background
                 ZStack {
                     // Blurred image background (current folder or inherited from ancestor)
+                    // Use subtle blur for empty state, normal blur for content
                     if let imageData = inheritedImageData {
-                        BlurredImageBackground(imageData: imageData)
+                        if liveFolder.subfolders.isEmpty {
+                            BlurredImageBackground(imageData: imageData, blurRadius: 25, overlayOpacity: 0.3)
+                        } else {
+                            BlurredImageBackground(imageData: imageData)
+                        }
                     }
                     
                     // Actual content
-                    if liveFolder.subfolders.isEmpty {
+                    if sortedSubfolders.isEmpty {
                         emptyState
                     } else {
                         mainContentView
@@ -312,7 +317,6 @@ struct FolderDetailView: View {
                     navigateToFullPath: navigateToFullPath,
                     highlightedItemId: $navigationHighlightedItemId
                 )
-                .presentationDetents([.height(620)])
             }
         }
         .sheet(isPresented: $showingFavorites) {
@@ -773,7 +777,7 @@ struct FolderDetailView: View {
                                     .renderingMode(.template)
                                     .resizable()
                                     .aspectRatio(contentMode: .fit)
-                                    .frame(width: 44, height: 44)
+                                    .frame(width: 50, height: 50)
                                     .frame(width: 72, height: 72)
                                     .clipShape(Circle())
                                     .glassEffect(.clear)
@@ -874,7 +878,6 @@ struct FolderDetailView: View {
             Spacer()
             Image(systemName: showingHiddenElements ? "eye.slash" : "bookmark.slash")
                 .font(.system(size: 60))
-                .foregroundColor(.gray)
             
             VStack(spacing: 8) {
                 if showingHiddenElements {
@@ -882,72 +885,76 @@ struct FolderDetailView: View {
                         .font(.headline)
                     Text("Los elementos ocultos aparecerán aquí")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.primary)
                 } else {
                     Text(folderPath.isEmpty ? "Sin Elementos creados" : "Sin Elementos guardados")
                         .font(.headline)
                     Text(folderPath.isEmpty ? "Crea un Elemento para comenzar" : "Crea uno nuevo.")
                         .font(.subheadline)
-                        .foregroundColor(.secondary)
                 }
             }
             
-            HStack(spacing: 16) {
-                if folderPath.isEmpty {
-                    // Big Button for Root
-                    Button {
-                        if !longPressDetected {
-                            HapticManager.lightImpact()
-                            isBatchAddMode = false
-                            showingNewFolderSheet = true
-                        }
-                        longPressDetected = false
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus")
-                            Text("Nuevo Elemento")
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                        .padding(.horizontal)
-                    }
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.5)
-                            .onEnded { _ in
-                                longPressDetected = true
-                                isBatchAddMode = true
+            if !showingHiddenElements {
+                HStack(spacing: 16) {
+                    if folderPath.isEmpty {
+                        // Big Button for Root
+                        Button {
+                            if !longPressDetected {
+                                HapticManager.lightImpact()
+                                isBatchAddMode = false
                                 showingNewFolderSheet = true
                             }
-                    )
-                } else {
-                    // Square Button for Sub
-                    Button {
-                        if !longPressDetected {
-                            HapticManager.lightImpact()
-                            isBatchAddMode = false
-                            showingNewFolderSheet = true
+                            longPressDetected = false
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                Text("Nuevo Elemento")
+                                    .font(.headline)
+                            }
+                            .foregroundColor(.primary)
+                            .frame(maxWidth: 250)
+                            .padding(.vertical, 16)
+                            .padding(.horizontal, 24)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .glassEffect(.clear)
                         }
-                        longPressDetected = false
-                    } label: {
-                        VStack {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                        }
-                        .frame(width: 100, height: 80)
-                        .background(Color.blue.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.5)
-                            .onEnded { _ in
-                                longPressDetected = true
-                                isBatchAddMode = true
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5)
+                                .onEnded { _ in
+                                    longPressDetected = true
+                                    isBatchAddMode = true
+                                    showingNewFolderSheet = true
+                                }
+                        )
+                    } else {
+                        // Square Button for Sub
+                        Button {
+                            if !longPressDetected {
+                                HapticManager.lightImpact()
+                                isBatchAddMode = false
                                 showingNewFolderSheet = true
                             }
-                    )
+                            longPressDetected = false
+                        } label: {
+                            VStack {
+                                Image(systemName: "plus")
+                                    .font(.title2)
+                                    .foregroundColor(.primary)
+                            }
+                            .frame(width: 100, height: 80)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .glassEffect(.clear)
+                        }
+                        .simultaneousGesture(
+                            LongPressGesture(minimumDuration: 0.5)
+                                .onEnded { _ in
+                                    longPressDetected = true
+                                    isBatchAddMode = true
+                                    showingNewFolderSheet = true
+                                }
+                        )
+                    }
                 }
             }
             

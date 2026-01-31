@@ -510,6 +510,36 @@ class RandomitasViewModel: ObservableObject {
         return getFolderAtPath(path)
     }
     
+    /// Gets the image data for a folder, checking the folder first then its ancestors
+    func getInheritedImageData(for path: [Int]) -> Data? {
+        // First check if current folder has its own image
+        if let folder = getFolderAtPath(path), let imageData = folder.imageData {
+            return imageData
+        }
+        
+        // If not, traverse ancestors from closest to root
+        guard !path.isEmpty else { return nil }
+        
+        for endIndex in stride(from: path.count - 1, through: 1, by: -1) {
+            let ancestorPath = Array(path.prefix(endIndex))
+            if let ancestor = getFolderAtPath(ancestorPath),
+               let imageData = ancestor.imageData {
+                return imageData
+            }
+        }
+        
+        // Check root level folder
+        if path.count >= 1 {
+            let rootPath = [path[0]]
+            if let rootFolder = getFolderAtPath(rootPath),
+               let imageData = rootFolder.imageData {
+                return imageData
+            }
+        }
+        
+        return nil
+    }
+    
     // MARK: - Rename Methods
     func renameFolder(id: UUID, newName: String) {
         let request = NSFetchRequest<FolderEntity>(entityName: "FolderEntity")

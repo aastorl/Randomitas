@@ -14,7 +14,7 @@ struct EmptyStateView: View {
         VStack(spacing: 20) {
             Image(systemName: "bookmark.slash")
                 .font(.system(size: 64))
-                .foregroundColor(.gray)
+                .foregroundColor(.primary)
             
             VStack(spacing: 8) {
                 Text("Comienza creando un Elemento")

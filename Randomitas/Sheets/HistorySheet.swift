@@ -13,12 +13,12 @@ struct HistorySheet: View {
     var navigateToFullPath: (([Int]) -> Void)? = nil
     @Binding var highlightedItemId: UUID?
     
-    // Computed property - filtra historial de elementos que aún existen
+    @State private var showingPathPopup: (name: String, path: String, timestamp: Date)? = nil
+    
     private var validHistory: [HistoryEntry] {
         viewModel.history
             .sorted { $0.timestamp > $1.timestamp }
             .filter { entry in
-                // Verificar que el folder aún existe
                 if let folder = viewModel.getFolderFromPath(entry.folderPath) {
                     return folder.id == entry.itemId
                 }
@@ -28,47 +28,50 @@ struct HistorySheet: View {
     
     var body: some View {
         NavigationStack {
-            List {
+            Group {
                 if validHistory.isEmpty {
-                    Text("Sin historial")
-                        .foregroundColor(.gray)
+                    // Empty State
+                    SheetEmptyStateView(
+                        icon: "clock.arrow.circlepath",
+                        title: "Sin Historial",
+                        subtitle: "Los resultados aleatorios de las últimas 24 horas aparecerán aquí"
+                    )
                 } else {
-                    ForEach(validHistory) { entry in
-                        Button(action: {
-                            // Navigate to the item directly
-                            if let navigate = navigateToFullPath {
-                                highlightedItemId = entry.itemId
-                                navigate(entry.folderPath)
-                                isPresented = false
-                            }
-                        }) {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.itemName)
-                                    .fontWeight(.semibold)
-                                    .foregroundColor(.primary)
-                                let reversed = reversePathString(entry.path, itemName: entry.itemName)
-                                if !reversed.isEmpty {
-                                    HStack(spacing: 4) {
-                                        Text("< \(reversed)")
-                                            .font(.caption)
-                                            .foregroundColor(.gray)
+                    List {
+                        ForEach(validHistory) { entry in
+                            let pathString = reversePathString(entry.path, itemName: entry.itemName)
+                            let inheritedImage = viewModel.getInheritedImageData(for: entry.folderPath)
+                            
+                            SheetRowView(
+                                name: entry.itemName,
+                                imageData: inheritedImage,
+                                onTap: {
+                                    if let navigate = navigateToFullPath {
+                                        highlightedItemId = entry.itemId
+                                        navigate(entry.folderPath)
+                                        isPresented = false
                                     }
+                                },
+                                onLongPress: {
+                                    HapticManager.lightImpact()
+                                    showingPathPopup = (name: entry.itemName, path: pathString, timestamp: entry.timestamp)
                                 }
-                                Text(entry.timestamp, style: .time)
-                                    .font(.caption2)
-                                    .foregroundColor(.gray)
+                            )
+                            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                            .listRowBackground(Color(.systemBackground).opacity(0.7))
+                        }
+                        .onDelete { indices in
+                            let validEntries = validHistory
+                            for index in indices {
+                                if index < validEntries.count {
+                                    viewModel.removeHistoryEntry(id: validEntries[index].id)
+                                }
                             }
                         }
                     }
-                    .onDelete { indices in
-                        // Mapear índices de validHistory a history real
-                        let validEntries = validHistory
-                        for index in indices {
-                            if index < validEntries.count {
-                                viewModel.removeHistoryEntry(id: validEntries[index].id)
-                            }
-                        }
-                    }
+                    .scrollContentBackground(.hidden)
+                    .background(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 0)
                 }
             }
             .navigationTitle("Historial (24hs)")
@@ -78,13 +81,24 @@ struct HistorySheet: View {
                     Button("Cerrar") { isPresented = false }
                 }
             }
+            .alert(showingPathPopup?.name ?? "", isPresented: Binding(
+                get: { showingPathPopup != nil },
+                set: { if !$0 { showingPathPopup = nil } }
+            )) {
+                Button("OK", role: .cancel) {
+                    showingPathPopup = nil
+                }
+            } message: {
+                if let popup = showingPathPopup {
+                    Text("< \(popup.path)\n\n\(popup.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                }
+            }
         }
     }
 
     private func reversePathString(_ path: String, itemName: String) -> String {
         var components = path.components(separatedBy: " > ")
         
-        // Remove item name if it's at the end (to get parent path)
         if let last = components.last, last == itemName {
             components.removeLast()
         }
@@ -96,4 +110,3 @@ struct HistorySheet: View {
         return components.reversed().joined(separator: " < ")
     }
 }
-

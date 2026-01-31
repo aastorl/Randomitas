@@ -53,31 +53,17 @@ struct ResultSheet: View {
                     // Content
                     ScrollView {
                         VStack(spacing: 24) {
-                            // Imagen grande
-                            ZStack {
-                                if let imageData = currentFolder.imageData, let uiImage = UIImage(data: imageData) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
-                                        .frame(minWidth: 0, maxWidth: .infinity)
-                                        .frame(height: 300)
-                                        .clipped()
-                                } else {
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
+                            // Imagen grande (solo si tiene imagen)
+                            if let imageData = currentFolder.imageData, let uiImage = UIImage(data: imageData) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(minWidth: 0, maxWidth: .infinity)
                                     .frame(height: 300)
-                                    .overlay(
-                                        Image(systemName: "atom")
-                                            .font(.system(size: 64))
-                                            .foregroundColor(.blue)
-                                    )
-                                }
+                                    .clipped()
+                                    .cornerRadius(16)
+                                    .padding(.horizontal)
                             }
-                            .cornerRadius(16)
-                            .padding(.horizontal)
                             
                             VStack(alignment: .leading, spacing: 12) {
                                 // Nombre
@@ -174,14 +160,14 @@ struct ResultSheet: View {
                                     }
                                 } label: {
                                     HStack(spacing: 8) {
-                                        Image(systemName: "photo")
-                                        Text("Imagen")
+                                        Image(systemName: currentFolder.imageData != nil ? "photo.fill" : "photo")
+                                        Text(currentFolder.imageData != nil ? "Imagen" : "Agregar")
                                             .font(.subheadline)
                                     }
                                     .frame(maxWidth: .infinity)
                                     .padding()
-                                    .background(Color(.systemGray6))
-                                    .foregroundColor(.primary)
+                                    .background(currentFolder.imageData != nil ? Color.green.opacity(0.2) : Color(.systemGray6))
+                                    .foregroundColor(currentFolder.imageData != nil ? .green : .primary)
                                     .cornerRadius(10)
                                 }
                                 }
@@ -239,6 +225,7 @@ struct ResultSheet: View {
         .onAppear {
             isFavorite = viewModel.isFolderFavorite(folderId: currentFolder.id)
         }
+        .presentationDetents([.height(currentFolder.imageData != nil ? 620 : 280)])
     }
     
     // MARK: - Subvistas

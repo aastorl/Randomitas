@@ -112,9 +112,16 @@ struct EditElementSheet: View {
                     }
                 } label: {
                     HStack {
-                        if selectedImageData != nil {
+                        if hasImageChanged && selectedImageData != nil {
+                            // Nueva imagen añadida o imagen actualizada
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text(folder.imageData == nil ? "Imagen Agregada" : "Imagen Actualizada")
+                                .foregroundStyle(.primary)
+                        } else if selectedImageData != nil {
+                            // Ya tenía imagen, no modificada
                             Image(systemName: "photo.fill")
-                            // .foregroundStyle(.primary) - Removed to avoid potential conflicts or compilation issues with older modifiers if any
+                                .foregroundStyle(.primary)
                             Text("Editar Imagen")
                                 .foregroundStyle(.primary)
                         } else {

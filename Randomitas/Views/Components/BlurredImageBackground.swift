@@ -10,6 +10,8 @@ internal import SwiftUI
 /// A subtle blurred image background that adapts to light/dark mode
 struct BlurredImageBackground: View {
     let imageData: Data?
+    var blurRadius: CGFloat = 50
+    var overlayOpacity: Double? = nil // nil means use default adaptive values
     @Environment(\.colorScheme) var colorScheme
     
     var body: some View {
@@ -19,12 +21,12 @@ struct BlurredImageBackground: View {
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: geometry.size.width, height: geometry.size.height)
-                    .blur(radius: 50)
+                    .blur(radius: blurRadius)
                     .overlay(
                         // Adaptive overlay for readability
                         colorScheme == .dark
-                            ? Color.black.opacity(0.6)
-                            : Color.white.opacity(0.7)
+                            ? Color.black.opacity(overlayOpacity ?? 0.6)
+                            : Color.white.opacity(overlayOpacity ?? 0.7)
                     )
                     .clipped()
             }

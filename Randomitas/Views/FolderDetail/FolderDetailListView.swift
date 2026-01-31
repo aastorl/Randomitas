@@ -47,6 +47,7 @@ struct FolderDetailListView: View {
                     Text("Vacío").foregroundColor(.gray)
                 }
             }
+            .scrollContentBackground(.hidden)
             .refreshable {
                 await MainActor.run {
                     onOpenSearch?()
@@ -222,7 +223,9 @@ struct FolderDetailListView: View {
             }
             .allowsHitTesting(isSelectionMode)
         }
-        .listRowBackground(isSelectionMode ? Color(.systemBackground) : nil)
+        .listRowBackground(
+            Color(.systemBackground).opacity(0.7)
+        )
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) {
                 deleteWithUndo(subfolder)
