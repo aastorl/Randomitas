@@ -147,117 +147,127 @@ struct FolderDetailListView: View {
     
     @ViewBuilder
     private func subfolderRow(_ subfolder: Folder) -> some View {
-        // Calculate index strictly from the current list context? 
-        // We know `subfolder` is inside the current folder (at folderPath).
-        // If folderPath is empty (Root), we find index in viewModel.folders.
-        // If folderPath is not empty, we find index in getFolderAtPath(folderPath).subfolders.
+        // Calculate index - returns nil if subfolder no longer exists in the live data
+        let idx: Int? = {
+            if folderPath.isEmpty {
+                return viewModel.folders.firstIndex(where: { $0.id == subfolder.id })
+            } else {
+                if let parent = viewModel.getFolderFromPath(folderPath) {
+                    return parent.subfolders.firstIndex(where: { $0.id == subfolder.id })
+                } else {
+                    return nil
+                }
+            }
+        }()
         
-        let idx: Int
-        if folderPath.isEmpty {
-            idx = viewModel.folders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+        // Guard against stale data - if element no longer exists, show disabled view
+        if let validIdx = idx {
+            ZStack(alignment: .leading) {
+                NavigationLink(destination: FolderDetailView(
+                    folder: subfolder,
+                    folderPath: folderPath + [validIdx],
+                    viewModel: viewModel,
+                    navigationPath: $navigationPath
+                )) {
+                    EmptyView()
+                }
+                .opacity(0)
+                .disabled(isSelectionMode)
+                
+                HStack(spacing: 12) {
+                    // Selection checkmark (left side)
+                    if isSelectionMode {
+                        Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .gray)
+                            .font(.system(size: 22))
+                    }
+                    
+                    Image(systemName: "atom")
+                        .foregroundColor(.blue)
+                        .frame(width: 40, height: 40)
+                    
+                    Text(subfolder.name)
+                    
+                    // Icono para carpetas ocultas
+                    if subfolder.isHidden {
+                        Image(systemName: "eye.slash")
+                            .foregroundColor(.gray)
+                            .font(.system(size: 14))
+                    }
+                    
+                    Spacer()
+                    
+                    // Indicador de navegación personalizado
+                    if !isSelectionMode {
+                        if subfolder.subfolders.isEmpty {
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(Color(.systemGray3))
+                                .font(.system(size: 14, weight: .semibold))
+                        } else {
+                            Image(systemName: "arrow.right")
+                                .foregroundColor(Color(.systemGray3))
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if isSelectionMode {
+                        if selectedItemIds.contains(subfolder.id) {
+                            selectedItemIds.remove(subfolder.id)
+                        } else {
+                            selectedItemIds.insert(subfolder.id)
+                        }
+                    }
+                }
+                .allowsHitTesting(isSelectionMode)
+            }
+            .listRowBackground(
+                Color(.systemBackground).opacity(0.7)
+            )
+            .swipeActions(edge: .trailing) {
+                Button(role: .destructive) {
+                    deleteWithUndo(subfolder)
+                } label: {
+                    Label("Eliminar", systemImage: "trash")
+                }
+            }
+            .contextMenu {
+                Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx]) } label: {
+                    Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
+                }
+                Button {
+                    isSelectionMode = true
+                    selectedItemIds.insert(subfolder.id)
+                } label: {
+                    Label("Seleccionar", systemImage: "checkmark.circle")
+                }
+                Button {
+                    editingElement = EditingInfo(folder: subfolder, path: folderPath + [validIdx])
+                } label: {
+                    Label("Editar", systemImage: "pencil")
+                }
+                Button {
+                    viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                } label: {
+                    Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                }
+                Button(role: .destructive) {
+                    deleteWithUndo(subfolder)
+                } label: {
+                    Label("Eliminar", systemImage: "trash")
+                }
+            }
         } else {
-             if let parent = viewModel.getFolderFromPath(folderPath) {
-                 idx = parent.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
-             } else {
-                 idx = 0
-             }
-        }
-        
-        return ZStack(alignment: .leading) {
-            NavigationLink(destination: FolderDetailView(
-                folder: subfolder,
-                folderPath: folderPath + [idx],
-                viewModel: viewModel,
-                navigationPath: $navigationPath
-            )) {
-                EmptyView()
-            }
-            .opacity(0)
-            .disabled(isSelectionMode)
-            
-            HStack(spacing: 12) {
-                // Selection checkmark (left side)
-                if isSelectionMode {
-                    Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
-                        .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .gray)
-                        .font(.system(size: 22))
-                }
-                
+            // Element no longer exists - show placeholder
+            HStack {
                 Image(systemName: "atom")
-                    .foregroundColor(.blue)
-                    .frame(width: 40, height: 40)
-                
+                    .foregroundColor(.gray)
                 Text(subfolder.name)
-                
-                // Icono para carpetas ocultas
-                if subfolder.isHidden {
-                    Image(systemName: "eye.slash")
-                        .foregroundColor(.gray)
-                        .font(.system(size: 14))
-                }
-                
-                Spacer()
-                
-                // Indicador de navegación personalizado
-                if !isSelectionMode {
-                    if subfolder.subfolders.isEmpty {
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(Color(.systemGray3))
-                            .font(.system(size: 14, weight: .semibold))
-                    } else {
-                        Image(systemName: "arrow.right")
-                            .foregroundColor(Color(.systemGray3))
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                }
+                    .foregroundColor(.gray)
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                if isSelectionMode {
-                    if selectedItemIds.contains(subfolder.id) {
-                        selectedItemIds.remove(subfolder.id)
-                    } else {
-                        selectedItemIds.insert(subfolder.id)
-                    }
-                }
-            }
-            .allowsHitTesting(isSelectionMode)
-        }
-        .listRowBackground(
-            Color(.systemBackground).opacity(0.7)
-        )
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive) {
-                deleteWithUndo(subfolder)
-            } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
-        }
-        .contextMenu {
-            Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
-                Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
-            }
-            Button {
-                isSelectionMode = true
-                selectedItemIds.insert(subfolder.id)
-            } label: {
-                Label("Seleccionar", systemImage: "checkmark.circle")
-            }
-            Button {
-                editingElement = EditingInfo(folder: subfolder, path: folderPath + [idx])
-            } label: {
-                Label("Editar", systemImage: "pencil")
-            }
-            Button {
-                viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [idx])
-            } label: {
-                Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
-            }
-            Button(role: .destructive) {
-                deleteWithUndo(subfolder)
-            } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
+            .opacity(0.5)
+            .listRowBackground(Color(.systemBackground).opacity(0.7))
         }
     }
 }

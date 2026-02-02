@@ -82,14 +82,15 @@ struct FolderDetailGalleryView: View {
     
     @ViewBuilder
     private func galleryFolderCell(_ subfolder: Folder) -> some View {
-        let idx: Int = {
+        // Calculate index - returns nil if subfolder no longer exists in the live data
+        let idx: Int? = {
             if folderPath.isEmpty {
-                return viewModel.folders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+                return viewModel.folders.firstIndex(where: { $0.id == subfolder.id })
             } else {
                 if let parent = viewModel.getFolderFromPath(folderPath) {
-                    return parent.subfolders.firstIndex(where: { $0.id == subfolder.id }) ?? 0
+                    return parent.subfolders.firstIndex(where: { $0.id == subfolder.id })
                 } else {
-                    return 0
+                    return nil
                 }
             }
         }()
@@ -165,54 +166,61 @@ struct FolderDetailGalleryView: View {
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         
         // Usar NavigationLink o tap gesture según el modo
-        Group {
-            if isSelectionMode {
-                cellContent
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if selectedItemIds.contains(subfolder.id) {
-                            selectedItemIds.remove(subfolder.id)
-                        } else {
-                            selectedItemIds.insert(subfolder.id)
-                        }
-                    }
-            } else {
-                NavigationLink(destination: FolderDetailView(
-                    folder: subfolder,
-                    folderPath: folderPath + [idx],
-                    viewModel: viewModel,
-                    navigationPath: $navigationPath
-                )) {
+        // Only show navigation/context if idx is valid (element still exists in live data)
+        if let validIdx = idx {
+            Group {
+                if isSelectionMode {
                     cellContent
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if selectedItemIds.contains(subfolder.id) {
+                                selectedItemIds.remove(subfolder.id)
+                            } else {
+                                selectedItemIds.insert(subfolder.id)
+                            }
+                        }
+                } else {
+                    NavigationLink(destination: FolderDetailView(
+                        folder: subfolder,
+                        folderPath: folderPath + [validIdx],
+                        viewModel: viewModel,
+                        navigationPath: $navigationPath
+                    )) {
+                        cellContent
+                    }
+                    .buttonStyle(PlainButtonStyle())
                 }
-                .buttonStyle(PlainButtonStyle())
             }
-        }
-        .contextMenu {
-            Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [idx]) } label: {
-                Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
+            .contextMenu {
+                Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx]) } label: {
+                    Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
+                }
+                Button {
+                    isSelectionMode = true
+                    selectedItemIds.insert(subfolder.id)
+                } label: {
+                    Label("Seleccionar", systemImage: "checkmark.circle")
+                }
+                Button {
+                    editingElement = EditingInfo(folder: subfolder, path: folderPath + [validIdx])
+                } label: {
+                    Label("Editar", systemImage: "pencil")
+                }
+                Button {
+                    viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                } label: {
+                    Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                }
+                Button(role: .destructive) {
+                    folderToDelete = subfolder
+                } label: {
+                    Label("Eliminar", systemImage: "trash")
+                }
             }
-            Button {
-                isSelectionMode = true
-                selectedItemIds.insert(subfolder.id)
-            } label: {
-                Label("Seleccionar", systemImage: "checkmark.circle")
-            }
-            Button {
-                editingElement = EditingInfo(folder: subfolder, path: folderPath + [idx])
-            } label: {
-                Label("Editar", systemImage: "pencil")
-            }
-            Button {
-                viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [idx])
-            } label: {
-                Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
-            }
-            Button(role: .destructive) {
-                folderToDelete = subfolder
-            } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
+        } else {
+            // Element no longer exists in live data - show content without interaction
+            cellContent
+                .opacity(0.5)
         }
     }
     

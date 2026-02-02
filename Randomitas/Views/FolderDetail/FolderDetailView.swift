@@ -34,6 +34,7 @@ struct FolderDetailView: View {
     @State private var pickerID = UUID()
     @State private var showLabel = false
     @State private var longPressDetected = false
+    @State private var isPressedPlusButton = false
     @State private var toolbarReady = false
     
     // Edit Sheet State
@@ -49,7 +50,8 @@ struct FolderDetailView: View {
     @State private var selectedFolderResult: (folder: Folder, path: [Int])?
     @State private var showingFolderResult = false
     @Binding var navigationPath: NavigationPath
-    @State private var navigationHighlightedItemId: UUID? 
+    @State private var navigationHighlightedItemId: UUID?
+    @State private var showFirstElementAlert = false 
     
     // Dynamic access to live data
     var liveFolder: Folder {
@@ -129,11 +131,13 @@ struct FolderDetailView: View {
                 }
             }
             
-            // BOTTOM BAR
-            if isSelectionMode {
-                selectionActionBar
-            } else {
-                bottomBarView
+            // BOTTOM BAR - Hide when showing onboarding (root with no elements)
+            if !(folderPath.isEmpty && liveFolder.subfolders.isEmpty) {
+                if isSelectionMode {
+                    selectionActionBar
+                } else {
+                    bottomBarView
+                }
             }
             
             // Search Results Overlay
@@ -178,9 +182,14 @@ struct FolderDetailView: View {
                     }
                 } else {
                     Button(action: {
-                        withAnimation(.spring()) {
-                            isSearching = true
-                            isSearchFocused = true
+                        // Show alert if no elements exist at root
+                        if folderPath.isEmpty && liveFolder.subfolders.isEmpty {
+                            showFirstElementAlert = true
+                        } else {
+                            withAnimation(.spring()) {
+                                isSearching = true
+                                isSearchFocused = true
+                            }
                         }
                     }) {
                         Image(systemName: "magnifyingglass")
@@ -193,29 +202,39 @@ struct FolderDetailView: View {
                 HStack(spacing: 12) {
                     if folderPath.isEmpty {
                         if !isSelectionMode {
-                            Menu {
+                            // Show alert if no elements, otherwise show menu
+                            if liveFolder.subfolders.isEmpty {
                                 Button(action: {
-                                    withAnimation {
-                                        isSelectionMode = true
-                                    }
+                                    showFirstElementAlert = true
                                 }) {
-                                    Label("Seleccionar", systemImage: "checkmark.circle")
+                                    Image(systemName: "ellipsis")
+                                        .foregroundColor(.blue)
                                 }
-                                
-                                Button(action: {
-                                    withAnimation {
-                                        showingHiddenElements.toggle()
+                            } else {
+                                Menu {
+                                    Button(action: {
+                                        withAnimation {
+                                            isSelectionMode = true
+                                        }
+                                    }) {
+                                        Label("Seleccionar", systemImage: "checkmark.circle")
                                     }
-                                }) {
-                                    if showingHiddenElements {
-                                        Label("Volver a Elementos", systemImage: "atom")
-                                    } else {
-                                        Label("Elementos Ocultos", systemImage: "eye.slash")
+                                    
+                                    Button(action: {
+                                        withAnimation {
+                                            showingHiddenElements.toggle()
+                                        }
+                                    }) {
+                                        if showingHiddenElements {
+                                            Label("Volver a Elementos", systemImage: "atom")
+                                        } else {
+                                            Label("Elementos Ocultos", systemImage: "eye.slash")
+                                        }
                                     }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .foregroundColor(.blue)
                                 }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .foregroundColor(.blue)
                             }
                         } else {
                             let allSelected = !sortedSubfolders.isEmpty && selectedItemIds.count == sortedSubfolders.count
@@ -411,6 +430,11 @@ struct FolderDetailView: View {
         } message: {
             Text("Esta acción no se puede deshacer.")
         }
+        .alert("Sin Elementos", isPresented: $showFirstElementAlert) {
+            Button("Ok", role: .cancel) { }
+        } message: {
+            Text("Crea tu primer elemento para comenzar")
+        }
         .onAppear {
             currentViewType = viewModel.getViewType(for: folderPath.isEmpty ? nil : liveFolder.id)
             currentSortType = viewModel.getSortType(for: folderPath.isEmpty ? nil : liveFolder.id)
@@ -425,32 +449,65 @@ struct FolderDetailView: View {
     
     @ViewBuilder
     private var toolbarView: some View {
+        // Check if we're in onboarding state (root with no elements)
+        let isOnboarding = folderPath.isEmpty && liveFolder.subfolders.isEmpty
+        
         HStack(spacing: 25) {
-            SortMenuView(sortType: $currentSortType)
-                .foregroundColor(.blue)
-                .font(.system(size: 18))
-                .onChange(of: currentSortType) { viewModel.setSortType($0, for: folderPath.isEmpty ? nil : liveFolder.id) }
-                .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-            
-            Menu {
-                Picker("Vista", selection: $currentViewType) {
-                    Text("Lista").tag(RandomitasViewModel.ViewType.list)
-                    Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
-                    Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
+            // Sort Menu - show alert if onboarding
+            if isOnboarding {
+                Button(action: { showFirstElementAlert = true }) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 18))
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
                 }
-                .onChange(of: currentViewType) { newValue in
-                    viewModel.setViewType(newValue, for: folderPath.isEmpty ? nil : liveFolder.id)
-                }
-            } label: {
-                Image(systemName: "rectangle.grid.1x2")
+            } else {
+                SortMenuView(sortType: $currentSortType)
                     .foregroundColor(.blue)
                     .font(.system(size: 18))
+                    .onChange(of: currentSortType) { viewModel.setSortType($0, for: folderPath.isEmpty ? nil : liveFolder.id) }
                     .frame(maxWidth: .infinity)
                     .contentShape(Rectangle())
             }
             
-            Button(action: { HapticManager.lightImpact(); showingHistory = true }) {
+            // View Menu - show alert if onboarding
+            if isOnboarding {
+                Button(action: { showFirstElementAlert = true }) {
+                    Image(systemName: "rectangle.grid.1x2")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 18))
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                }
+            } else {
+                Menu {
+                    Picker("Vista", selection: $currentViewType) {
+                        Text("Lista").tag(RandomitasViewModel.ViewType.list)
+                        Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
+                        Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
+                    }
+                    .onChange(of: currentViewType) { newValue in
+                        viewModel.setViewType(newValue, for: folderPath.isEmpty ? nil : liveFolder.id)
+                    }
+                } label: {
+                    Image(systemName: "rectangle.grid.1x2")
+                        .foregroundColor(.blue)
+                        .font(.system(size: 18))
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                }
+            }
+            
+            // History - show alert if onboarding
+            Button(action: {
+                if isOnboarding {
+                    showFirstElementAlert = true
+                } else {
+                    HapticManager.lightImpact()
+                    showingHistory = true
+                }
+            }) {
                 Image(systemName: "clock")
                     .foregroundColor(.blue)
                     .font(.system(size: 18))
@@ -467,19 +524,36 @@ struct FolderDetailView: View {
                         showingNewFolderSheet = true
                     }
                     longPressDetected = false
+                    isPressedPlusButton = false
                 } label: {
                     Image(systemName: "plus")
                         .foregroundColor(.blue)
                         .font(.system(size: 20))
                         .frame(maxWidth: .infinity)
+                        .frame(height: 44)
                         .contentShape(Rectangle())
+                        .scaleEffect(isPressedPlusButton ? 0.85 : 1.0)
+                        .animation(.easeInOut(duration: 0.15), value: isPressedPlusButton)
                 }
                 .accessibilityIdentifier("addElementButton")
                 .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.5)
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { _ in
+                            if !isPressedPlusButton {
+                                isPressedPlusButton = true
+                            }
+                        }
+                        .onEnded { _ in
+                            isPressedPlusButton = false
+                        }
+                )
+                .simultaneousGesture(
+                    LongPressGesture(minimumDuration: 0.4)
                         .onEnded { _ in
                             longPressDetected = true
+                            isPressedPlusButton = false
                             isBatchAddMode = true
+                            HapticManager.mediumImpact()
                             showingNewFolderSheet = true
                         }
                 )
@@ -874,91 +948,83 @@ struct FolderDetailView: View {
     
     @ViewBuilder
     private var emptyState: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: showingHiddenElements ? "eye.slash" : "bookmark.slash")
-                .font(.system(size: 60))
-            
-            VStack(spacing: 8) {
-                if showingHiddenElements {
-                    Text("Sin Elementos Ocultos")
-                        .font(.headline)
-                    Text("Los elementos ocultos aparecerán aquí")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                } else {
-                    Text(folderPath.isEmpty ? "Sin Elementos creados" : "Sin Elementos guardados")
-                        .font(.headline)
-                    Text(folderPath.isEmpty ? "Crea un Elemento para comenzar" : "Crea uno nuevo.")
-                        .font(.subheadline)
-                }
+        // Show onboarding only for root level (first time experience)
+        if folderPath.isEmpty && !showingHiddenElements {
+            WelcomeOnboardingView {
+                HapticManager.lightImpact()
+                isBatchAddMode = false
+                showingNewFolderSheet = true
             }
-            
-            if !showingHiddenElements {
-                HStack(spacing: 16) {
-                    if folderPath.isEmpty {
-                        // Big Button for Root
-                        Button {
-                            if !longPressDetected {
-                                HapticManager.lightImpact()
-                                isBatchAddMode = false
-                                showingNewFolderSheet = true
-                            }
-                            longPressDetected = false
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                Text("Nuevo Elemento")
-                                    .font(.headline)
-                            }
+        } else {
+            // Standard empty state for subfolders or hidden elements view
+            VStack(spacing: 20) {
+                Spacer()
+                Image(systemName: showingHiddenElements ? "eye.slash" : "atom")
+                    .font(.system(size: 60))
+                    .foregroundColor(showingHiddenElements ? .orange : .blue)
+                
+                VStack(spacing: 8) {
+                    if showingHiddenElements {
+                        Text("Sin Elementos Ocultos")
+                            .font(.headline)
+                        Text("Los elementos ocultos aparecerán aquí")
+                            .font(.subheadline)
                             .foregroundColor(.primary)
-                            .frame(maxWidth: 250)
-                            .padding(.vertical, 16)
-                            .padding(.horizontal, 24)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .glassEffect(.clear)
-                        }
-                        .simultaneousGesture(
-                            LongPressGesture(minimumDuration: 0.5)
-                                .onEnded { _ in
-                                    longPressDetected = true
-                                    isBatchAddMode = true
-                                    showingNewFolderSheet = true
-                                }
-                        )
                     } else {
-                        // Square Button for Sub
-                        Button {
-                            if !longPressDetected {
-                                HapticManager.lightImpact()
-                                isBatchAddMode = false
-                                showingNewFolderSheet = true
-                            }
-                            longPressDetected = false
-                        } label: {
-                            VStack {
-                                Image(systemName: "plus")
-                                    .font(.title2)
-                                    .foregroundColor(.primary)
-                            }
-                            .frame(width: 100, height: 80)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
-                            .glassEffect(.clear)
-                        }
-                        .simultaneousGesture(
-                            LongPressGesture(minimumDuration: 0.5)
-                                .onEnded { _ in
-                                    longPressDetected = true
-                                    isBatchAddMode = true
-                                    showingNewFolderSheet = true
-                                }
-                        )
+                        Text("Sin Elementos guardados")
+                            .font(.headline)
+                        Text("Crea uno nuevo")
+                            .font(.subheadline)
                     }
                 }
+                
+                if !showingHiddenElements {
+                    // Button for subfolder empty state
+                    Button {
+                        if !longPressDetected {
+                            HapticManager.lightImpact()
+                            isBatchAddMode = false
+                            showingNewFolderSheet = true
+                        }
+                        longPressDetected = false
+                        isPressedPlusButton = false
+                    } label: {
+                        VStack {
+                            Image(systemName: "plus")
+                                .font(.title2)
+                                .foregroundColor(.primary)
+                        }
+                        .frame(width: 100, height: 80)
+                        .clipShape(RoundedRectangle(cornerRadius: 16))
+                        .glassEffect(.clear)
+                        .scaleEffect(isPressedPlusButton ? 0.9 : 1.0)
+                        .animation(.easeInOut(duration: 0.15), value: isPressedPlusButton)
+                    }
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                if !isPressedPlusButton {
+                                    isPressedPlusButton = true
+                                }
+                            }
+                            .onEnded { _ in
+                                isPressedPlusButton = false
+                            }
+                    )
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: 0.4)
+                            .onEnded { _ in
+                                longPressDetected = true
+                                isPressedPlusButton = false
+                                isBatchAddMode = true
+                                HapticManager.mediumImpact()
+                                showingNewFolderSheet = true
+                            }
+                    )
+                }
+                
+                Spacer()
             }
-            
-            Spacer()
         }
     }
     
