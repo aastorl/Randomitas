@@ -21,23 +21,63 @@ final class BatchAddModeUITests: XCTestCase {
         app = nil
     }
     
+    // MARK: - Helper Methods
+    
+    /// Ensures we have at least one element so the toolbar with + button is visible
+    /// Returns true if an element was created, false if elements already exist
+    @MainActor
+    private func ensureElementExists() -> Bool {
+        let addButton = app.buttons["addElementButton"]
+        
+        // If add button exists, we already have elements (or at least the toolbar is showing)
+        if addButton.waitForExistence(timeout: 2) {
+            return false
+        }
+        
+        // We're in onboarding mode - need to create first element via CTA button
+        let ctaButton = app.buttons["Crea tu primer elemento!"]
+        if ctaButton.waitForExistence(timeout: 2) {
+            ctaButton.tap()
+            
+            // Fill in the new element form
+            let textField = app.textFields["Nombre del Elemento"]
+            if textField.waitForExistence(timeout: 2) {
+                textField.tap()
+                textField.typeText("SetupElement")
+            }
+            
+            // Create the element
+            let crearButton = app.buttons["Crear"]
+            if crearButton.exists {
+                crearButton.tap()
+            }
+            
+            // Wait for the sheet to close and UI to update
+            sleep(1)
+            return true
+        }
+        
+        return false
+    }
+    
     // MARK: - Test Batch Add Mode (Add Lock)
     
     /// This test verifies long press opens batch mode
-    /// Note: The batch mode functionality is fully verified by testBatchModeCreatesMultipleElements
-    /// which actually creates elements using batch mode
     @MainActor
     func testLongPressOnPlusOpensBatchMode() throws {
-        // Given: The app is open on main screen
-        let addButton = app.images["addElementButton"]
+        // Ensure we have elements so toolbar is visible
+        _ = ensureElementExists()
+        
+        // Given: The app is open on main screen with toolbar visible
+        let addButton = app.buttons["addElementButton"]
         
         guard addButton.waitForExistence(timeout: 5) else {
-            XCTFail("Add button not found")
+            XCTFail("Add button not found - toolbar may not be visible")
             return
         }
         
-        // When: Long pressing on the plus button (0.7s to trigger batch mode)
-        addButton.press(forDuration: 0.8)
+        // When: Long pressing on the plus button (0.5s to trigger batch mode)
+        addButton.press(forDuration: 0.6)
         
         // Wait for sheet animation
         sleep(2)
@@ -58,18 +98,20 @@ final class BatchAddModeUITests: XCTestCase {
             listoButton.tap()
         } else if cancelarButton.exists {
             // Normal mode opened instead - this could happen due to gesture timing
-            // The comprehensive test is testBatchModeCreatesMultipleElements which definitely works
             cancelarButton.tap()
         }
     }
     
     @MainActor
     func testTapOnPlusOpensNormalMode() throws {
+        // Ensure we have elements so toolbar is visible
+        _ = ensureElementExists()
+        
         // Given: The app is open on main screen
-        let addButton = app.images["addElementButton"]
+        let addButton = app.buttons["addElementButton"]
         
         guard addButton.waitForExistence(timeout: 5) else {
-            XCTFail("Add button not found")
+            XCTFail("Add button not found - toolbar may not be visible")
             return
         }
         
@@ -85,7 +127,6 @@ final class BatchAddModeUITests: XCTestCase {
         
         if sheetAppeared {
             // In normal mode, should have "Cancelar" not "Listo"
-            // And "Crear" not "Crear y Continuar"
             XCTAssertTrue(cancelarButton.exists || (app.buttons.count > 0), "Normal mode should show 'Cancelar' button")
             
             // "Crear y Continuar" should NOT exist in normal mode
@@ -101,19 +142,27 @@ final class BatchAddModeUITests: XCTestCase {
     
     @MainActor
     func testBatchModeCreatesMultipleElements() throws {
+        // Ensure we have elements so toolbar is visible
+        _ = ensureElementExists()
+        
         // Given: The app is open, long press to enter batch mode
-        let addButton = app.images["addElementButton"]
+        let addButton = app.buttons["addElementButton"]
         
         guard addButton.waitForExistence(timeout: 5) else {
-            XCTFail("Add button not found")
+            XCTFail("Add button not found - toolbar may not be visible")
             return
         }
         
-        addButton.press(forDuration: 0.7)
+        addButton.press(forDuration: 0.6)
         
         let crearYContinuar = app.buttons["Crear y Continuar"]
         guard crearYContinuar.waitForExistence(timeout: 2) else {
-            XCTFail("Batch mode sheet did not appear")
+            // If batch mode didn't open, close any sheet and skip
+            let cancelarButton = app.buttons["Cancelar"]
+            if cancelarButton.exists {
+                cancelarButton.tap()
+            }
+            XCTFail("Batch mode sheet did not appear - long press may not have been detected")
             return
         }
         
@@ -126,14 +175,10 @@ final class BatchAddModeUITests: XCTestCase {
         
         crearYContinuar.tap()
         
-        // Then: Sheet should stay open (batch mode)
-        // Check for success indicator
-        let successIndicator = app.staticTexts.matching(NSPredicate(format: "label CONTAINS '1 elemento'")).firstMatch
-        
         // Wait a moment for UI to update
         sleep(1)
         
-        // The sheet should still be present
+        // The sheet should still be present (batch mode keeps it open)
         XCTAssertTrue(crearYContinuar.exists || app.buttons["Listo"].exists, "Sheet should remain open in batch mode")
         
         // Create second element
@@ -144,7 +189,7 @@ final class BatchAddModeUITests: XCTestCase {
         
         crearYContinuar.tap()
         
-        // Wait and verify counter
+        // Wait and verify
         sleep(1)
         
         // Close the sheet
@@ -180,3 +225,4 @@ extension XCUIElement {
         self.typeText(text)
     }
 }
+

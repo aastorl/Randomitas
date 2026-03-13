@@ -23,14 +23,41 @@ struct HiddenFoldersSheet: View {
     private var sortedHiddenFolders: [(folder: Folder, path: [Int])] {
         switch sortType {
         case .nameAsc:
-            return hiddenFolders.sorted { $0.folder.name.localizedCaseInsensitiveCompare($1.folder.name) == .orderedAscending }
+            return hiddenFolders.sorted { viewModel.sortName(for: $0.folder.name).localizedStandardCompare(viewModel.sortName(for: $1.folder.name)) == .orderedAscending }
         case .nameDesc:
-            return hiddenFolders.sorted { $0.folder.name.localizedCaseInsensitiveCompare($1.folder.name) == .orderedDescending }
+            return hiddenFolders.sorted { viewModel.sortName(for: $0.folder.name).localizedStandardCompare(viewModel.sortName(for: $1.folder.name)) == .orderedDescending }
         case .dateNewest:
             return hiddenFolders.sorted { ($0.folder.createdAt ?? Date.distantPast) > ($1.folder.createdAt ?? Date.distantPast) }
         case .dateOldest:
             return hiddenFolders.sorted { ($0.folder.createdAt ?? Date.distantPast) < ($1.folder.createdAt ?? Date.distantPast) }
         }
+    }
+    
+    private var isAlphabeticalSort: Bool {
+        sortType == .nameAsc || sortType == .nameDesc
+    }
+    
+    private var groupedHiddenFolders: [(letter: String, items: [(folder: Folder, path: [Int])])] {
+        var groups: [(String, [(folder: Folder, path: [Int])])] = []
+        var currentLetter = ""
+        var currentGroup: [(folder: Folder, path: [Int])] = []
+        
+        for item in sortedHiddenFolders {
+            let letter = viewModel.sectionLetter(for: item.folder)
+            if letter != currentLetter {
+                if !currentGroup.isEmpty {
+                    groups.append((currentLetter, currentGroup))
+                }
+                currentLetter = letter
+                currentGroup = [item]
+            } else {
+                currentGroup.append(item)
+            }
+        }
+        if !currentGroup.isEmpty {
+            groups.append((currentLetter, currentGroup))
+        }
+        return groups
     }
     
     var body: some View {
@@ -44,34 +71,74 @@ struct HiddenFoldersSheet: View {
                     )
                 } else {
                     List {
-                        Section() {
-                            ForEach(Array(sortedHiddenFolders.enumerated()), id: \.element.folder.id) { index, item in
-                                let pathString = viewModel.getReversedPathString(for: item.path)
-                                let inheritedImage = viewModel.getInheritedImageData(for: item.path)
-                                
-                                SheetRowView(
-                                    name: item.folder.name,
-                                    imageData: inheritedImage,
-                                    onTap: {
-                                        highlightedItemId = item.folder.id
-                                        navigateToFullPath(item.path)
-                                        isPresented = false
-                                    },
-                                    onLongPress: {
-                                        HapticManager.lightImpact()
-                                        showingPathPopup = (name: item.folder.name, path: pathString)
+                        if isAlphabeticalSort {
+                            ForEach(groupedHiddenFolders, id: \.letter) { group in
+                                Section {
+                                    ForEach(Array(group.items.enumerated()), id: \.element.folder.id) { index, item in
+                                        let pathString = viewModel.getReversedPathString(for: item.path)
+                                        let inheritedImage = viewModel.getInheritedImageData(for: item.path)
+                                        
+                                        SheetRowView(
+                                            name: item.folder.name,
+                                            imageData: inheritedImage,
+                                            onTap: {
+                                                highlightedItemId = item.folder.id
+                                                navigateToFullPath(item.path)
+                                                isPresented = false
+                                            },
+                                            onLongPress: {
+                                                HapticManager.lightImpact()
+                                                showingPathPopup = (name: item.folder.name, path: pathString)
+                                            }
+                                        )
+                                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                        .listRowBackground(Color(.systemBackground).opacity(0.7))
                                     }
-                                )
-                                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                                .listRowBackground(Color(.systemBackground).opacity(0.7))
+                                    .onDelete { indices in
+                                        let itemsInGroup = group.items
+                                        let foldersToRemove = indices.map { itemsInGroup[$0] }
+                                        let originalIndices = IndexSet(foldersToRemove.compactMap { folder in
+                                            hiddenFolders.firstIndex(where: { $0.folder.id == folder.folder.id })
+                                        })
+                                        viewModel.removeHiddenFolders(at: originalIndices, from: hiddenFolders)
+                                    }
+                                } header: {
+                                    Text(group.letter)
+                                        .font(.title3.bold())
+                                        .foregroundColor(.secondary)
+                                        .textCase(nil)
+                                }
                             }
-                            .onDelete { indices in
-                                let currentSorted = sortedHiddenFolders
-                                let foldersToRemove = indices.map { currentSorted[$0] }
-                                let originalIndices = IndexSet(foldersToRemove.compactMap { folder in
-                                    hiddenFolders.firstIndex(where: { $0.folder.id == folder.folder.id })
-                                })
-                                viewModel.removeHiddenFolders(at: originalIndices, from: hiddenFolders)
+                        } else {
+                            Section() {
+                                ForEach(Array(sortedHiddenFolders.enumerated()), id: \.element.folder.id) { index, item in
+                                    let pathString = viewModel.getReversedPathString(for: item.path)
+                                    let inheritedImage = viewModel.getInheritedImageData(for: item.path)
+                                    
+                                    SheetRowView(
+                                        name: item.folder.name,
+                                        imageData: inheritedImage,
+                                        onTap: {
+                                            highlightedItemId = item.folder.id
+                                            navigateToFullPath(item.path)
+                                            isPresented = false
+                                        },
+                                        onLongPress: {
+                                            HapticManager.lightImpact()
+                                            showingPathPopup = (name: item.folder.name, path: pathString)
+                                        }
+                                    )
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                    .listRowBackground(Color(.systemBackground).opacity(0.7))
+                                }
+                                .onDelete { indices in
+                                    let currentSorted = sortedHiddenFolders
+                                    let foldersToRemove = indices.map { currentSorted[$0] }
+                                    let originalIndices = IndexSet(foldersToRemove.compactMap { folder in
+                                        hiddenFolders.firstIndex(where: { $0.folder.id == folder.folder.id })
+                                    })
+                                    viewModel.removeHiddenFolders(at: originalIndices, from: hiddenFolders)
+                                }
                             }
                         }
                     }

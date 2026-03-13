@@ -22,8 +22,14 @@ struct ResultSheet: View {
         return folder
     }
     
-    @State var isFavorite: Bool = false
+    
+    var isFavorite: Bool {
+        viewModel.isFolderFavorite(folderId: currentFolder.id)
+    }
     @State var imagePickerRequest: ImagePickerRequest?
+    @State private var selectedDetent: PresentationDetent = .height(280)
+    @State private var showingHiddenAncestorAlert = false
+    @State private var hiddenAncestorAlertName = ""
     
     // Inline Renaming
     @State private var isEditingName = false
@@ -53,16 +59,31 @@ struct ResultSheet: View {
                     // Content
                     ScrollView {
                         VStack(spacing: 24) {
-                            // Imagen grande (solo si tiene imagen)
+                            // Imagen grande con context menu (solo si tiene imagen)
                             if let imageData = currentFolder.imageData, let uiImage = UIImage(data: imageData) {
-                                Image(uiImage: uiImage)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(minWidth: 0, maxWidth: .infinity)
-                                    .frame(height: 300)
-                                    .clipped()
-                                    .cornerRadius(16)
-                                    .padding(.horizontal)
+                                Menu {
+                                    Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                                        Label("Tomar foto", systemImage: "camera.fill")
+                                    }
+                                    Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                                        Label("Seleccionar de galería", systemImage: "photo.fill")
+                                    }
+                                    Divider()
+                                    Button(role: .destructive, action: {
+                                        viewModel.updateFolderImage(imageData: nil, at: path)
+                                    }) {
+                                        Label("Eliminar imagen", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(uiImage: uiImage)
+                                        .resizable()
+                                        .scaledToFill()
+                                        .frame(minWidth: 0, maxWidth: .infinity)
+                                        .frame(height: 300)
+                                        .clipped()
+                                        .cornerRadius(16)
+                                        .padding(.horizontal)
+                                }
                             }
                             
                             VStack(alignment: .leading, spacing: 12) {
@@ -78,7 +99,7 @@ struct ResultSheet: View {
                                                 .fontWeight(.bold)
                                                 .focused($isFocused)
                                                 .onSubmit {
-                                                    viewModel.renameFolder(id: folder.id, newName: editingName)
+                                                    viewModel.renameFolder(id: currentFolder.id, newName: editingName)
                                                     isEditingName = false
                                                 }
                                         } else {
@@ -119,59 +140,78 @@ struct ResultSheet: View {
                             
                             // Botones de acción
                             VStack(spacing: 12) {
-                                HStack(spacing: 12) {
-                                // Favorito
-                                Button(action: {
-                                    HapticManager.lightImpact()
-                                    isFavorite.toggle()
-                                    viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
-                                }) {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: isFavorite ? "star.fill" : "star")
-                                        Text(isFavorite ? "Favorito" : "Agregar")
-                                            .font(.subheadline)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(isFavorite ? Color.yellow.opacity(0.2) : Color(.systemGray6))
-                                    .foregroundColor(isFavorite ? .yellow : .primary)
-                                    .cornerRadius(10)
-                                }
-                                
-                                // Imagen
-                                Menu {
+                                HStack(spacing: 8) {
+                                    // Favorito
                                     Button(action: {
-                                        imagePickerRequest = ImagePickerRequest(sourceType: .camera)
+                                        HapticManager.lightImpact()
+                                        viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
                                     }) {
-                                        Label("Tomar foto", systemImage: "camera.fill")
+                                        HStack(spacing: 4) {
+                                            Image(systemName: isFavorite ? "star.fill" : "star")
+                                                .font(.subheadline)
+                                            Text(isFavorite ? "Favorito" : "Agregar")
+                                                .font(.subheadline)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.7)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 8)
+                                        .background(isFavorite ? Color.yellow.opacity(0.2) : Color(.systemGray6))
+                                        .foregroundColor(isFavorite ? .yellow : .primary)
+                                        .cornerRadius(10)
                                     }
+                                    
+                                    // Ocultar
                                     Button(action: {
-                                        imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary)
+                                        HapticManager.lightImpact()
+                                        viewModel.toggleFolderHidden(folder: currentFolder, path: path)
                                     }) {
-                                        Label("Seleccionar galería", systemImage: "photo.fill")
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "eye.slash")
+                                                .font(.subheadline)
+                                            Text("Ocultar")
+                                                .font(.subheadline)
+                                                .lineLimit(1)
+                                                .minimumScaleFactor(0.7)
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .padding(.horizontal, 8)
+                                        .background(Color.gray.opacity(0.2))
+                                        .foregroundColor(.orange)
+                                        .cornerRadius(10)
                                     }
-                                    if currentFolder.imageData != nil {
-                                        Divider()
-                                        Button(role: .destructive, action: {
-                                            viewModel.updateFolderImage(imageData: nil, at: path)
-                                        }) {
-                                            Label("Eliminar imagen", systemImage: "trash")
+                                    
+                                    // Agregar Imagen (solo si no tiene)
+                                    if currentFolder.imageData == nil {
+                                        Menu {
+                                            Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                                                Label("Tomar foto", systemImage: "camera.fill")
+                                            }
+                                            Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                                                Label("Seleccionar de galería", systemImage: "photo.fill")
+                                            }
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "photo")
+                                                    .font(.subheadline)
+                                                Text("Imagen")
+                                                    .font(.subheadline)
+                                                    .lineLimit(1)
+                                                    .minimumScaleFactor(0.7)
+                                            }
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 12)
+                                            .padding(.horizontal, 8)
+                                            .background(Color(.systemGray6))
+                                            .foregroundColor(.primary)
+                                            .cornerRadius(10)
                                         }
                                     }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Image(systemName: currentFolder.imageData != nil ? "photo.fill" : "photo")
-                                        Text(currentFolder.imageData != nil ? "Imagen" : "Agregar")
-                                            .font(.subheadline)
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(currentFolder.imageData != nil ? Color.green.opacity(0.2) : Color(.systemGray6))
-                                    .foregroundColor(currentFolder.imageData != nil ? .green : .primary)
-                                    .cornerRadius(10)
                                 }
-                                }
-                                
+
+
                                 // Abrir Carpeta
                                 Button(action: {
                                     HapticManager.mediumImpact()
@@ -223,9 +263,25 @@ struct ResultSheet: View {
             }
         }
         .onAppear {
-            isFavorite = viewModel.isFolderFavorite(folderId: currentFolder.id)
+            selectedDetent = currentFolder.imageData != nil ? .height(620) : .height(280)
         }
-        .presentationDetents([.height(currentFolder.imageData != nil ? 620 : 280)])
+        .onChange(of: currentFolder.imageData) { _, newValue in
+            withAnimation {
+                selectedDetent = newValue != nil ? .height(620) : .height(280)
+            }
+        }
+        .presentationDetents(currentFolder.imageData != nil ? [.height(280), .height(620)] : [.height(280)], selection: $selectedDetent)
+        .presentationContentInteraction(.scrolls)
+        .alert("Elemento Oculto", isPresented: $viewModel.showHiddenFavoriteAlert) {
+            Button("Ok", role: .cancel) { }
+        } message: {
+            Text("Los elementos ocultos no pueden ser favoritos. Desoculta este elemento primero.")
+        }
+        .alert("Elemento Protegido", isPresented: $showingHiddenAncestorAlert) {
+            Button("Ok", role: .cancel) { }
+        } message: {
+            Text("Para modificar la visibilidad de este elemento, debes desocultar: \(hiddenAncestorAlertName)")
+        }
     }
     
     // MARK: - Subvistas
@@ -272,7 +328,7 @@ struct ResultSheet: View {
                         .font(.title3.bold())
                         .focused($isFocused)
                         .onSubmit {
-                            viewModel.renameFolder(id: folder.id, newName: editingName)
+                            viewModel.renameFolder(id: currentFolder.id, newName: editingName)
                             isEditingName = false
                         }
                 } else {
@@ -316,7 +372,7 @@ struct ResultSheet: View {
     
     private var favoriteButton: some View {
         Button {
-            isFavorite.toggle()
+            HapticManager.lightImpact()
             viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
         } label: {
             Label(isFavorite ? "Favorito" : "Agregar",

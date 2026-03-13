@@ -86,9 +86,9 @@ struct MoveCopySheet: View {
                                     selectRoot()
                                 }) {
                                     HStack(spacing: 12) {
-                                        Image(systemName: "house.fill")
-                                            .font(.title3)
-                                            .foregroundColor(.orange)
+                                        // Image(systemName: "")
+                                           // .font(.title3)
+                                           // .foregroundColor(.mint.opacity(0.5))
                                         Text("Randomitas")
                                             .font(.headline)
                                             .foregroundColor(.primary)
@@ -481,6 +481,10 @@ struct FolderTreeNode: View {
         selectedFolder?.id == folder.id
     }
     
+    private var isFolderHidden: Bool {
+        folder.isHidden
+    }
+    
     private var isDisabled: Bool {
         foldersToMove.contains(where: { $0.id == folder.id })
     }
@@ -511,17 +515,18 @@ struct FolderTreeNode: View {
                     selectThis()
                 }) {
                     HStack(spacing: 12) {
-                        Image(systemName: "atom")
+                        Image(systemName: isFolderHidden ? "eye.slash" : "atom")
                             .font(.body)
-                            .foregroundColor(isDisabled ? .gray : .blue)
+                            .foregroundColor(isDisabled ? .gray : (isFolderHidden ? .gray : .blue))
                         Text(folder.name)
                             .font(.body)
-                            .foregroundColor(isDisabled ? .gray : .primary)
+                            .foregroundColor(isDisabled ? .gray : (isFolderHidden ? .secondary : .primary))
                         Spacer()
                         if isSelected {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(.blue)
                         }
+                        
                     }
                 }
                 .disabled(isDisabled)

@@ -12,14 +12,18 @@ struct FolderDetailListView: View {
     // removed @ObservedObject var folder: FolderWrapper - not needed if we rely on sortedSubfolders + path
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
+    let sortType: RandomitasViewModel.SortType
+    let isInHiddenContext: Bool
+    @Binding var showingHiddenAncestorAlert: Bool
+    @Binding var hiddenAncestorAlertName: String
     
     
     @Binding var editingElement: EditingInfo?
     
-    // Undo delete state
-    @State private var deletedFolder: Folder?
-    @State private var showUndoSnackbar = false
-    @State private var undoTimer: Timer?
+    // Undo delete system
+    @State private var pendingDeleteFolder: Folder?
+    @State private var pendingDeleteTimer: Timer?
+    @State private var showUndoToast: Bool = false
     
     @Binding var imagePickerRequest: ImagePickerRequest?
     @Binding var moveCopyOperation: MoveCopyOperation?
@@ -33,115 +37,164 @@ struct FolderDetailListView: View {
     
     @Environment(\.dismiss) var dismiss
     
+    /// Subfolders filtered to exclude the pending-delete element
+    private var visibleSubfolders: [Folder] {
+        if let pending = pendingDeleteFolder {
+            return sortedSubfolders.filter { $0.id != pending.id }
+        }
+        return sortedSubfolders
+    }
+    
+    /// Whether to show alphabetical section headers
+    private var isAlphabeticalSort: Bool {
+        sortType == .nameAsc || sortType == .nameDesc
+    }
+    
+    /// Groups sorted subfolders by their first letter (using sortName logic)
+    private var groupedSubfolders: [(letter: String, folders: [Folder])] {
+        var groups: [(String, [Folder])] = []
+        var currentLetter = ""
+        var currentGroup: [Folder] = []
+        
+        for folder in visibleSubfolders {
+            let letter = viewModel.sectionLetter(for: folder)
+            if letter != currentLetter {
+                if !currentGroup.isEmpty {
+                    groups.append((currentLetter, currentGroup))
+                }
+                currentLetter = letter
+                currentGroup = [folder]
+            } else {
+                currentGroup.append(folder)
+            }
+        }
+        if !currentGroup.isEmpty {
+            groups.append((currentLetter, currentGroup))
+        }
+        return groups
+    }
+    
     var body: some View {
-        ScrollViewReader { proxy in
-            List {
-                if !sortedSubfolders.isEmpty {
-                    ForEach(sortedSubfolders, id: \.id) { subfolder in
-                        subfolderRow(subfolder)
-                            .id(subfolder.id)
+        ZStack(alignment: .bottom) {
+            ScrollViewReader { proxy in
+                List {
+                    if !visibleSubfolders.isEmpty {
+                        if isAlphabeticalSort {
+                            ForEach(groupedSubfolders, id: \.letter) { group in
+                                Section {
+                                    ForEach(group.folders, id: \.id) { subfolder in
+                                        subfolderRow(subfolder)
+                                            .id(subfolder.id)
+                                    }
+                                } header: {
+                                    Text(group.letter)
+                                        .font(.body.bold())
+                                        .foregroundColor(.secondary)
+                                        .textCase(nil)
+                                }
+                            }
+                        } else {
+                            ForEach(visibleSubfolders, id: \.id) { subfolder in
+                                subfolderRow(subfolder)
+                                    .id(subfolder.id)
+                            }
+                        }
+                    }
+                    
+                    if visibleSubfolders.isEmpty && pendingDeleteFolder == nil {
+                        Text("Vacío").foregroundColor(.gray)
                     }
                 }
-                
-                if sortedSubfolders.isEmpty {
-                    Text("Vacío").foregroundColor(.gray)
+                .scrollContentBackground(.hidden)
+                .refreshable {
+                    await MainActor.run {
+                        onOpenSearch?()
+                    }
                 }
-            }
-            .scrollContentBackground(.hidden)
-            .refreshable {
-                await MainActor.run {
-                    onOpenSearch?()
-                }
-            }
-            .onAppear {
-                if let id = highlightedItemId {
-                    withAnimation {
-                        proxy.scrollTo(id, anchor: .center)
+                .onAppear {
+                    if let id = highlightedItemId {
+                        withAnimation {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
                     }
                 }
             }
-        }
-        .safeAreaInset(edge: .bottom) {
-            Color.clear.frame(height: 80)
-        }
-        .overlay(alignment: .bottom) {
-            // Undo Snackbar
-            if showUndoSnackbar, let folder = deletedFolder {
+            
+            // Undo toast
+            if showUndoToast, let folder = pendingDeleteFolder {
                 HStack {
+                    Image(systemName: "trash")
+                        .foregroundColor(.primary)
                     Text("\"\(folder.name)\" eliminado")
-                        .foregroundColor(.white)
-                        .font(.system(size: 14, weight: .medium))
-                    
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
                     Spacer()
-                    
                     Button("Deshacer") {
                         undoDelete()
                     }
+                    .fontWeight(.bold)
                     .foregroundColor(.yellow)
-                    .font(.system(size: 14, weight: .bold))
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.black.opacity(0.85))
-                .cornerRadius(10)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .glassEffect(.clear)
+                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
                 .padding(.horizontal, 16)
-                .padding(.bottom, 100)
+                .padding(.bottom, 90)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.3), value: showUndoSnackbar)
     }
     
-    // MARK: - Undo Logic
+    // MARK: - Delete & Undo Logic
     
-    private func deleteWithUndo(_ folder: Folder) {
-        // Cancel any existing timer
-        undoTimer?.invalidate()
+    private func startPendingDelete(_ folder: Folder) {
+        // Cancel any existing pending delete first (commit it)
+        commitPendingDelete()
         
-        // Store the folder for potential undo
-        deletedFolder = folder
+        withAnimation {
+            pendingDeleteFolder = folder
+            showUndoToast = true
+        }
         
-        // Delete immediately
         HapticManager.warning()
+        
+        pendingDeleteTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
+            DispatchQueue.main.async {
+                commitPendingDelete()
+            }
+        }
+    }
+    
+    private func commitPendingDelete() {
+        pendingDeleteTimer?.invalidate()
+        pendingDeleteTimer = nil
+        
+        guard let folder = pendingDeleteFolder else { return }
+        
         if folderPath.isEmpty {
             viewModel.deleteRootFolder(id: folder.id)
         } else {
             viewModel.deleteSubfolder(id: folder.id, from: folderPath)
         }
         
-        // Show snackbar
         withAnimation {
-            showUndoSnackbar = true
-        }
-        
-        // Start timer to hide snackbar after 4 seconds
-        undoTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
-            withAnimation {
-                showUndoSnackbar = false
-                deletedFolder = nil
-            }
+            pendingDeleteFolder = nil
+            showUndoToast = false
         }
     }
     
     private func undoDelete() {
-        guard let folder = deletedFolder else { return }
+        pendingDeleteTimer?.invalidate()
+        pendingDeleteTimer = nil
         
-        // Cancel timer
-        undoTimer?.invalidate()
+        HapticManager.lightImpact()
         
-        // Re-add the folder
-        if folderPath.isEmpty {
-            viewModel.addRootFolder(name: folder.name, isFavorite: false, imageData: folder.imageData)
-        } else {
-            viewModel.addSubfolder(name: folder.name, to: folderPath, isFavorite: false, imageData: folder.imageData)
-        }
-        
-        HapticManager.success()
-        
-        // Hide snackbar
         withAnimation {
-            showUndoSnackbar = false
-            deletedFolder = nil
+            pendingDeleteFolder = nil
+            showUndoToast = false
         }
     }
     
@@ -182,18 +235,11 @@ struct FolderDetailListView: View {
                             .font(.system(size: 22))
                     }
                     
-                    Image(systemName: "atom")
-                        .foregroundColor(.blue)
+                    Image(systemName: subfolder.isHidden ? "eye.slash" : "atom")
+                        .foregroundColor(subfolder.isHidden ? .orange : .blue)
                         .frame(width: 40, height: 40)
                     
                     Text(subfolder.name)
-                    
-                    // Icono para carpetas ocultas
-                    if subfolder.isHidden {
-                        Image(systemName: "eye.slash")
-                            .foregroundColor(.gray)
-                            .font(.system(size: 14))
-                    }
                     
                     Spacer()
                     
@@ -227,7 +273,7 @@ struct FolderDetailListView: View {
             )
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
-                    deleteWithUndo(subfolder)
+                    startPendingDelete(subfolder)
                 } label: {
                     Label("Eliminar", systemImage: "trash")
                 }
@@ -248,12 +294,24 @@ struct FolderDetailListView: View {
                     Label("Editar", systemImage: "pencil")
                 }
                 Button {
-                    viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                    if isInHiddenContext {
+                        // Show popup about hidden ancestor
+                        if let ancestorName = viewModel.getHiddenAncestorName(at: folderPath + [validIdx]) ?? viewModel.getFolderFromPath(folderPath).flatMap({ $0.isHidden ? $0.name : nil }) {
+                            hiddenAncestorAlertName = ancestorName
+                            showingHiddenAncestorAlert = true
+                        }
+                    } else {
+                        viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                    }
                 } label: {
-                    Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                    if isInHiddenContext {
+                        Label("Mostrar", systemImage: "eye")
+                    } else {
+                        Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                    }
                 }
                 Button(role: .destructive) {
-                    deleteWithUndo(subfolder)
+                    startPendingDelete(subfolder)
                 } label: {
                     Label("Eliminar", systemImage: "trash")
                 }
@@ -261,8 +319,8 @@ struct FolderDetailListView: View {
         } else {
             // Element no longer exists - show placeholder
             HStack {
-                Image(systemName: "atom")
-                    .foregroundColor(.gray)
+                Image(systemName: "eye.slash")
+                    .foregroundColor(.orange)
                 Text(subfolder.name)
                     .foregroundColor(.gray)
             }

@@ -17,34 +17,59 @@ struct FavoritesSheet: View {
     @State private var sortType: RandomitasViewModel.SortType = .nameAsc
     @State private var showingPathPopup: (name: String, path: String)? = nil
     
-    private var validFavorites: [(FolderReference, [Int])] {
-        viewModel.folderFavorites.filter { fav in
-            if let folder = viewModel.getFolderFromPath(fav.1) {
-                return folder.id == fav.0.id
+    private var validFavorites: [(ref: FolderReference, path: [Int], folder: Folder)] {
+        viewModel.folderFavorites.compactMap { favRef in
+            guard let path = viewModel.findPathById(favRef.id),
+                  let folder = viewModel.getFolderFromPath(path),
+                  folder.id == favRef.id else {
+                return nil
             }
-            return false
+            return (ref: favRef, path: path, folder: folder)
         }
     }
     
-    private var sortedFavorites: [(FolderReference, [Int])] {
-        let folders = validFavorites.compactMap { fav -> (FolderReference, [Int], Folder)? in
-            guard let folder = viewModel.getFolderFromPath(fav.1) else { return nil }
-            return (fav.0, fav.1, folder)
-        }
-        
-        let sorted: [(FolderReference, [Int], Folder)]
+    private var sortedFavorites: [(ref: FolderReference, path: [Int], folder: Folder)] {
+        let sorted: [(ref: FolderReference, path: [Int], folder: Folder)]
         switch sortType {
         case .nameAsc:
-            sorted = folders.sorted { $0.0.name.localizedCaseInsensitiveCompare($1.0.name) == .orderedAscending }
+            sorted = validFavorites.sorted { viewModel.sortName(for: $0.folder.name).localizedStandardCompare(viewModel.sortName(for: $1.folder.name)) == .orderedAscending }
         case .nameDesc:
-            sorted = folders.sorted { $0.0.name.localizedCaseInsensitiveCompare($1.0.name) == .orderedDescending }
+            sorted = validFavorites.sorted { viewModel.sortName(for: $0.folder.name).localizedStandardCompare(viewModel.sortName(for: $1.folder.name)) == .orderedDescending }
         case .dateNewest:
-            sorted = folders.sorted { ($0.2.createdAt ?? Date.distantPast) > ($1.2.createdAt ?? Date.distantPast) }
+            sorted = validFavorites.sorted { ($0.folder.createdAt ?? Date.distantPast) > ($1.folder.createdAt ?? Date.distantPast) }
         case .dateOldest:
-            sorted = folders.sorted { ($0.2.createdAt ?? Date.distantPast) < ($1.2.createdAt ?? Date.distantPast) }
+            sorted = validFavorites.sorted { ($0.folder.createdAt ?? Date.distantPast) < ($1.folder.createdAt ?? Date.distantPast) }
         }
         
-        return sorted.map { ($0.0, $0.1) }
+        return sorted
+    }
+    
+    private var isAlphabeticalSort: Bool {
+        sortType == .nameAsc || sortType == .nameDesc
+    }
+    
+    private var groupedFavorites: [(letter: String, items: [(ref: FolderReference, path: [Int], folder: Folder)])] {
+        var groups: [(String, [(ref: FolderReference, path: [Int], folder: Folder)])] = []
+        var currentLetter = ""
+        var currentGroup: [(ref: FolderReference, path: [Int], folder: Folder)] = []
+        
+        for fav in sortedFavorites {
+            let normalized = viewModel.sortName(for: fav.folder.name)
+            let first = normalized.first.map { $0.isLetter ? String($0).uppercased() : "#" } ?? "#"
+            if first != currentLetter {
+                if !currentGroup.isEmpty {
+                    groups.append((currentLetter, currentGroup))
+                }
+                currentLetter = first
+                currentGroup = [fav]
+            } else {
+                currentGroup.append(fav)
+            }
+        }
+        if !currentGroup.isEmpty {
+            groups.append((currentLetter, currentGroup))
+        }
+        return groups
     }
     
     var body: some View {
@@ -58,34 +83,74 @@ struct FavoritesSheet: View {
                     )
                 } else {
                     List {
-                        Section(header: Text("")) {
-                            ForEach(sortedFavorites, id: \.0.id) { fav in
-                                let pathString = viewModel.getReversedPathString(for: fav.1)
-                                let inheritedImage = viewModel.getInheritedImageData(for: fav.1)
-                                
-                                SheetRowView(
-                                    name: fav.0.name,
-                                    imageData: inheritedImage,
-                                    onTap: {
-                                        highlightedItemId = fav.0.id
-                                        navigateToFullPath(fav.1)
-                                        isPresented = false
-                                    },
-                                    onLongPress: {
-                                        HapticManager.lightImpact()
-                                        showingPathPopup = (name: fav.0.name, path: pathString)
+                        if isAlphabeticalSort {
+                            ForEach(groupedFavorites, id: \.letter) { group in
+                                Section {
+                                    ForEach(group.items, id: \.ref.id) { fav in
+                                        let pathString = viewModel.getReversedPathString(for: fav.path)
+                                        let inheritedImage = viewModel.getInheritedImageData(for: fav.path)
+                                        
+                                        SheetRowView(
+                                            name: fav.folder.name,
+                                            imageData: inheritedImage,
+                                            onTap: {
+                                                highlightedItemId = fav.ref.id
+                                                navigateToFullPath(fav.path)
+                                                isPresented = false
+                                            },
+                                            onLongPress: {
+                                                HapticManager.lightImpact()
+                                                showingPathPopup = (name: fav.folder.name, path: pathString)
+                                            }
+                                        )
+                                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                        .listRowBackground(Color(.systemBackground).opacity(0.7))
                                     }
-                                )
-                                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                                .listRowBackground(Color(.systemBackground).opacity(0.7))
+                                    .onDelete { indices in
+                                        let itemsInGroup = group.items
+                                        let idsToRemove = indices.map { itemsInGroup[$0].ref.id }
+                                        let realIndices = IndexSet(viewModel.folderFavorites.enumerated()
+                                            .filter { idsToRemove.contains($0.element.id) }
+                                            .map { $0.offset })
+                                        viewModel.removeFolderFavorites(at: realIndices)
+                                    }
+                                } header: {
+                                    Text(group.letter)
+                                        .font(.title3.bold())
+                                        .foregroundColor(.secondary)
+                                        .textCase(nil)
+                                }
                             }
-                            .onDelete { indices in
-                                let currentSorted = sortedFavorites
-                                let idsToRemove = indices.map { currentSorted[$0].0.id }
-                                let realIndices = IndexSet(viewModel.folderFavorites.enumerated()
-                                    .filter { idsToRemove.contains($0.element.0.id) }
-                                    .map { $0.offset })
-                                viewModel.removeFolderFavorites(at: realIndices)
+                        } else {
+                            Section(header: Text("")) {
+                                ForEach(sortedFavorites, id: \.ref.id) { fav in
+                                    let pathString = viewModel.getReversedPathString(for: fav.path)
+                                    let inheritedImage = viewModel.getInheritedImageData(for: fav.path)
+                                    
+                                    SheetRowView(
+                                        name: fav.folder.name,
+                                        imageData: inheritedImage,
+                                        onTap: {
+                                            highlightedItemId = fav.ref.id
+                                            navigateToFullPath(fav.path)
+                                            isPresented = false
+                                        },
+                                        onLongPress: {
+                                            HapticManager.lightImpact()
+                                            showingPathPopup = (name: fav.folder.name, path: pathString)
+                                        }
+                                    )
+                                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                                    .listRowBackground(Color(.systemBackground).opacity(0.7))
+                                }
+                                .onDelete { indices in
+                                    let currentSorted = sortedFavorites
+                                    let idsToRemove = indices.map { currentSorted[$0].ref.id }
+                                    let realIndices = IndexSet(viewModel.folderFavorites.enumerated()
+                                        .filter { idsToRemove.contains($0.element.id) }
+                                        .map { $0.offset })
+                                    viewModel.removeFolderFavorites(at: realIndices)
+                                }
                             }
                         }
                     }
@@ -271,7 +336,7 @@ struct SheetRowView: View {
             .onTapGesture {
                 onTap()
             }
-            .onLongPressGesture(minimumDuration: 0.5) {
+            .onLongPressGesture(minimumDuration: 0.3) {
                 onLongPress()
             }
             

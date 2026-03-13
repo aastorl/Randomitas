@@ -12,6 +12,10 @@ struct FolderDetailGalleryView: View {
     // removed FolderWrapper
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
+    let sortType: RandomitasViewModel.SortType
+    let isInHiddenContext: Bool
+    @Binding var showingHiddenAncestorAlert: Bool
+    @Binding var hiddenAncestorAlertName: String
     
     
     @Binding var editingElement: EditingInfo?
@@ -28,13 +32,57 @@ struct FolderDetailGalleryView: View {
     // Delete confirmation
     @State private var folderToDelete: Folder?
     
+    /// Whether to show alphabetical section headers
+    private var isAlphabeticalSort: Bool {
+        sortType == .nameAsc || sortType == .nameDesc
+    }
+    
+    /// Groups sorted subfolders by their first letter
+    private var groupedSubfolders: [(letter: String, folders: [Folder])] {
+        var groups: [(String, [Folder])] = []
+        var currentLetter = ""
+        var currentGroup: [Folder] = []
+        
+        for folder in sortedSubfolders {
+            let letter = viewModel.sectionLetter(for: folder)
+            if letter != currentLetter {
+                if !currentGroup.isEmpty {
+                    groups.append((currentLetter, currentGroup))
+                }
+                currentLetter = letter
+                currentGroup = [folder]
+            } else {
+                currentGroup.append(folder)
+            }
+        }
+        if !currentGroup.isEmpty {
+            groups.append((currentLetter, currentGroup))
+        }
+        return groups
+    }
+    
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(spacing: 20) {
-                    ForEach(sortedSubfolders, id: \.id) { subfolder in
-                        galleryFolderCell(subfolder)
-                            .id(subfolder.id)
+                VStack(alignment: .leading, spacing: 20) {
+                    if isAlphabeticalSort {
+                        ForEach(groupedSubfolders, id: \.letter) { group in
+                            // Section letter header
+                            Text(group.letter)
+                                .font(.title3.bold())
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 4)
+                            
+                            ForEach(group.folders, id: \.id) { subfolder in
+                                galleryFolderCell(subfolder)
+                                    .id(subfolder.id)
+                            }
+                        }
+                    } else {
+                        ForEach(sortedSubfolders, id: \.id) { subfolder in
+                            galleryFolderCell(subfolder)
+                                .id(subfolder.id)
+                        }
                     }
                 }
                 .padding()
@@ -106,24 +154,7 @@ struct FolderDetailGalleryView: View {
             } else {
                 LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                     .frame(height: 300)
-                    .overlay(Image(systemName: "atom").font(.system(size: 48)).foregroundColor(.blue))
-            }
-            
-            // Indicador de carpeta oculta (esquina superior derecha)
-            if subfolder.isHidden && !isSelectionMode {
-                VStack {
-                    HStack {
-                        Spacer()
-                        Image(systemName: "eye.slash")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Color.black.opacity(0.6))
-                            .clipShape(Circle())
-                    }
-                    Spacer()
-                }
-                .padding(12)
+                    .overlay(Image(systemName: subfolder.isHidden ? "eye.slash" : "atom").font(.system(size: 48)).foregroundColor(subfolder.isHidden ? .orange : .blue))
             }
             
             LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
@@ -207,9 +238,20 @@ struct FolderDetailGalleryView: View {
                     Label("Editar", systemImage: "pencil")
                 }
                 Button {
-                    viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                    if isInHiddenContext {
+                        if let ancestorName = viewModel.getHiddenAncestorName(at: folderPath + [validIdx]) ?? viewModel.getFolderFromPath(folderPath).flatMap({ $0.isHidden ? $0.name : nil }) {
+                            hiddenAncestorAlertName = ancestorName
+                            showingHiddenAncestorAlert = true
+                        }
+                    } else {
+                        viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                    }
                 } label: {
-                    Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                    if isInHiddenContext {
+                        Label("Mostrar", systemImage: "eye")
+                    } else {
+                        Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                    }
                 }
                 Button(role: .destructive) {
                     folderToDelete = subfolder

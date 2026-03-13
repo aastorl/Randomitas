@@ -18,9 +18,10 @@ class RandomitasViewModel: ObservableObject {
         Folder(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "Randomitas", subfolders: folders, imageData: nil, createdAt: Date(), isHidden: false)
     }
     
-    @Published var folderFavorites: [(FolderReference, [Int])] = []
+    @Published var folderFavorites: [FolderReference] = []
     @Published var history: [HistoryEntry] = []
     @Published var viewType: ViewType = .list
+    @Published var showHiddenFavoriteAlert = false
     
     private let historyLimit: TimeInterval = 86400
     private let coreDataStack = CoreDataStack.shared
@@ -74,19 +75,16 @@ class RandomitasViewModel: ObservableObject {
         let request = NSFetchRequest<FolderFavoritesEntity>(entityName: "FolderFavoritesEntity")
         do {
             let entities = try coreDataStack.context.fetch(request)
-            let allFolderFavorites = entities.compactMap { entity -> (FolderReference, [Int])? in
-                guard let id = entity.folderId, let name = entity.folderName, let data = entity.pathData else { return nil }
-                if let path = try? JSONDecoder().decode([Int].self, from: data) {
-                    return (FolderReference(id: id, name: name), path)
-                }
-                return nil
+            let allFolderFavorites = entities.compactMap { entity -> FolderReference? in
+                guard let id = entity.folderId, let name = entity.folderName else { return nil }
+                return FolderReference(id: id, name: name)
             }
             
             // Deduplicate by Folder ID
-            let uniqueFolderFavorites = Dictionary(grouping: allFolderFavorites, by: { $0.0.id })
+            let uniqueFolderFavorites = Dictionary(grouping: allFolderFavorites, by: { $0.id })
                 .compactMap { $0.value.first }
                 .sorted {
-                    self.sortName(for: $0.0.name).localizedStandardCompare(self.sortName(for: $1.0.name)) == .orderedAscending
+                    self.sortName(for: $0.name).localizedStandardCompare(self.sortName(for: $1.name)) == .orderedAscending
                 }
             
             folderFavorites = uniqueFolderFavorites
@@ -296,12 +294,21 @@ class RandomitasViewModel: ObservableObject {
     }
     
     // Helper to normalize names for sorting
-    private func sortName(for name: String) -> String {
+    func sortName(for name: String) -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.lowercased().hasPrefix("the ") {
             return String(trimmed.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return trimmed
+    }
+    
+    /// Returns the uppercase first letter of the normalized sort name for section headers
+    func sectionLetter(for folder: Folder) -> String {
+        let normalized = sortName(for: folder.name)
+        guard let first = normalized.first else { return "#" }
+        let upper = String(first).uppercased()
+        // If it's not a letter, group under "#"
+        return first.isLetter ? upper : "#"
     }
     
     // MARK: - State Check
@@ -312,23 +319,26 @@ class RandomitasViewModel: ObservableObject {
 
     // MARK: - Folder Favorites
     func toggleFolderFavorite(folder: Folder, path: [Int]) {
-        if let index = folderFavorites.firstIndex(where: { $0.0.id == folder.id }) {
+        if let index = folderFavorites.firstIndex(where: { $0.id == folder.id }) {
+            // Always allow removing from favorites
             folderFavorites.remove(at: index)
             deleteFolderFavorite(id: folder.id)
         } else {
-            folderFavorites.append((FolderReference(id: folder.id, name: folder.name), path))
-            saveFolderFavorite(id: folder.id, name: folder.name, path: path)
+            // Don't allow adding hidden elements as favorites
+            guard !isHiddenOrHasHiddenAncestor(at: path) else {
+                showHiddenFavoriteAlert = true
+                return
+            }
+            folderFavorites.append(FolderReference(id: folder.id, name: folder.name))
+            saveFolderFavorite(id: folder.id, name: folder.name)
         }
     }
     
-    private func saveFolderFavorite(id: UUID, name: String, path: [Int]) {
+    private func saveFolderFavorite(id: UUID, name: String) {
         let fav = NSEntityDescription.insertNewObject(forEntityName: "FolderFavoritesEntity", into: coreDataStack.context) as! FolderFavoritesEntity
         fav.id = UUID()
         fav.folderId = id
         fav.folderName = name
-        if let data = try? JSONEncoder().encode(path) {
-            fav.pathData = data
-        }
         coreDataStack.save()
         loadFolderFavorites()
     }
@@ -349,12 +359,38 @@ class RandomitasViewModel: ObservableObject {
     }
     
     func isFolderFavorite(folderId: UUID) -> Bool {
-        folderFavorites.contains { $0.0.id == folderId }
+        folderFavorites.contains { $0.id == folderId }
+    }
+    
+    /// Busca un folder por UUID en todo el árbol y retorna su path dinámico actual
+    func findPathById(_ id: UUID) -> [Int]? {
+        for (index, folder) in folders.enumerated() {
+            if folder.id == id {
+                return [index]
+            }
+            if let subPath = findPathByIdRecursive(id, in: folder, currentPath: [index]) {
+                return subPath
+            }
+        }
+        return nil
+    }
+    
+    private func findPathByIdRecursive(_ id: UUID, in folder: Folder, currentPath: [Int]) -> [Int]? {
+        for (index, subfolder) in folder.subfolders.enumerated() {
+            let path = currentPath + [index]
+            if subfolder.id == id {
+                return path
+            }
+            if let found = findPathByIdRecursive(id, in: subfolder, currentPath: path) {
+                return found
+            }
+        }
+        return nil
     }
 
     func removeFolderFavorites(at offsets: IndexSet) {
         offsets.forEach { index in
-            let (folderRef, _) = folderFavorites[index]
+            let folderRef = folderFavorites[index]
             deleteFolderFavorite(id: folderRef.id, reload: false)
         }
         loadFolderFavorites()
@@ -376,9 +412,36 @@ class RandomitasViewModel: ObservableObject {
     }
     
     private func setFolderHidden(entity: FolderEntity, isHidden: Bool) {
-        // Solo marcar la carpeta actual, NO tocar las subcarpetas
         entity.isHidden = isHidden
-        // Las subcarpetas mantienen su propio estado isHidden independientemente
+        
+        // When hiding a parent, unhide all children recursively
+        // They're already hidden by the parent, so individual hidden state is redundant
+        if isHidden {
+            // Remove this element from favorites
+            if let folderId = entity.id {
+                removeFolderFromFavorites(id: folderId)
+            }
+            // Remove all children from favorites and unhide them
+            removeChildrenFavoritesAndUnhide(entity: entity)
+        }
+    }
+    
+    private func removeChildrenFavoritesAndUnhide(entity: FolderEntity) {
+        guard let subfolders = entity.subfolders as? Set<FolderEntity> else { return }
+        for child in subfolders {
+            child.isHidden = false
+            if let childId = child.id {
+                removeFolderFromFavorites(id: childId)
+            }
+            removeChildrenFavoritesAndUnhide(entity: child)
+        }
+    }
+    
+    private func removeFolderFromFavorites(id: UUID) {
+        if folderFavorites.contains(where: { $0.id == id }) {
+            folderFavorites.removeAll(where: { $0.id == id })
+            deleteFolderFavorite(id: id)
+        }
     }
 
     
@@ -392,6 +455,19 @@ class RandomitasViewModel: ObservableObject {
             }
         }
         return false
+    }
+    
+    /// Returns the name of the first hidden ancestor (NOT including the folder itself)
+    func getHiddenAncestorName(at path: [Int]) -> String? {
+        guard path.count >= 2 else { return nil }
+        // Check each ancestor level, excluding the last element (the folder itself)
+        for i in 1..<path.count {
+            let ancestorPath = Array(path.prefix(i))
+            if let entity = getFolderEntity(at: ancestorPath), entity.isHidden {
+                return entity.name ?? "Elemento"
+            }
+        }
+        return nil
     }
     
     func isFolderHidden(folderId: UUID) -> Bool {
@@ -610,6 +686,19 @@ class RandomitasViewModel: ObservableObject {
         print("Vista guardada para carpeta: \(viewType.rawValue)")
     }
     
+    // MARK: - Hidden Elements View State (in-memory only)
+    private var hiddenElementsViewState: [String: Bool] = [:]
+    
+    func getShowingHiddenElements(for path: [Int]) -> Bool {
+        let key = path.map(String.init).joined(separator: "_")
+        return hiddenElementsViewState[key] ?? false
+    }
+    
+    func setShowingHiddenElements(_ showing: Bool, for path: [Int]) {
+        let key = path.map(String.init).joined(separator: "_")
+        hiddenElementsViewState[key] = showing
+    }
+    
     // MARK: - Move & Copy
 
     // Nueva versión que usa ID del destino (más seguro para operaciones batch)
@@ -634,6 +723,8 @@ class RandomitasViewModel: ObservableObject {
                     // Mover a root
                     folder.parent = nil
                 }
+                // Reset hidden state - adapts to new context
+                folder.isHidden = false
                 coreDataStack.save()
                 coreDataStack.refresh()
                 loadFolders()
@@ -659,6 +750,8 @@ class RandomitasViewModel: ObservableObject {
                         return
                     }
                 }
+                // Reset hidden state - adapts to new context
+                folder.isHidden = false
                 coreDataStack.save()
                 coreDataStack.refresh()
                 loadFolders()
@@ -721,6 +814,7 @@ class RandomitasViewModel: ObservableObject {
         newFolder.id = UUID()
         newFolder.name = original.name
         newFolder.imageData = original.imageData
+        newFolder.isHidden = false  // Reset hidden state - adapts to new context
         newFolder.parent = parent
         
         if let subfolders = original.subfolders as? Set<FolderEntity> {
@@ -918,29 +1012,6 @@ class RandomitasViewModel: ObservableObject {
         return selected
     }
     
-    // Mode 3: Randomize all folders in the entire app
-    func randomizeAll() -> (folder: Folder, path: [Int])? {
-        var allFolders: [(folder: Folder, path: [Int])] = []
-        
-        // Collect all folders from root
-        collectAllFolders(from: folders, currentPath: [], into: &allFolders)
-        
-        // Filtrar carpetas ocultas (incluyendo las que tienen ancestros ocultos)
-        allFolders = allFolders.filter { !isHiddenOrHasHiddenAncestor(at: $0.path) }
-        
-        guard !allFolders.isEmpty else { return nil }
-        
-        let randomIndex = Int.random(in: 0..<allFolders.count)
-        let selected = allFolders[randomIndex]
-        
-        // Save to history
-        // Use dropLast() to exclude the current folder name from the path string
-        let pathString = getFolderPathString(for: Array(selected.path.dropLast()))
-        let entry = HistoryEntry(itemId: selected.folder.id, itemName: selected.folder.name, path: pathString, folderPath: selected.path)
-        saveHistory(entry)
-        
-        return selected
-    }
     
     // Helper: Collect all folders recursively
     private func collectAllFolders(from folders: [Folder], currentPath: [Int], into result: inout [(folder: Folder, path: [Int])]) {

@@ -31,6 +31,8 @@ struct EditElementSheet: View {
     @State private var selectedImageData: Data?
     @State private var hasImageChanged: Bool = false
     @Binding var moveCopyOperation: MoveCopyOperation?
+    @State private var showingHiddenAncestorAlert = false
+    @State private var hiddenAncestorAlertName = ""
     
     init(viewModel: RandomitasViewModel, isPresented: Binding<Bool>, folder: Folder, folderPath: [Int], moveCopyOperation: Binding<MoveCopyOperation?>) {
         self.viewModel = viewModel
@@ -42,132 +44,157 @@ struct EditElementSheet: View {
         self._selectedImageData = State(initialValue: folder.imageData)
     }
     
+    var currentFolder: Folder {
+        viewModel.getFolderFromPath(folderPath) ?? folder
+    }
+    
     var body: some View {
         NavigationStack {
-            VStack(spacing: 20) {
-                // Renombrar
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField("Nombre del Elemento", text: $editedName)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Renombrar
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField("Nombre del Elemento", text: $editedName)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                    }
+                    
+                    // Mover/Copiar
+                    Menu {
+                        Button(action: {
+                            moveCopyOperation = MoveCopyOperation(items: [folder], sourceContainerPath: Array(folderPath.dropLast()), isCopy: false)
+                            isPresented = false
+                        }) {
+                            Label("Mover", systemImage: "arrow.turn.up.right")
+                        }
+                        Button(action: {
+                            moveCopyOperation = MoveCopyOperation(items: [folder], sourceContainerPath: Array(folderPath.dropLast()), isCopy: true)
+                            isPresented = false
+                        }) {
+                            Label("Copiar", systemImage: "doc.on.doc")
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "arrow.turn.up.right")
+                                .foregroundStyle(.primary)
+                            Text("Mover/Copiar")
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
+                        }
+                        .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color(.systemGray6))
                         .cornerRadius(10)
-                }
-                
-                // Mover/Copiar
-                Menu {
+                    }
+                    
+                    // Mostrar/Ocultar
                     Button(action: {
-                        moveCopyOperation = MoveCopyOperation(items: [folder], sourceContainerPath: Array(folderPath.dropLast()), isCopy: false)
-                        isPresented = false
-                    }) {
-                        Label("Mover", systemImage: "arrow.turn.up.right")
-                    }
-                    Button(action: {
-                        moveCopyOperation = MoveCopyOperation(items: [folder], sourceContainerPath: Array(folderPath.dropLast()), isCopy: true)
-                        isPresented = false
-                    }) {
-                        Label("Copiar", systemImage: "doc.on.doc")
-                    }
-                } label: {
-                    HStack {
-                        Image(systemName: "arrow.turn.up.right")
-                            .foregroundStyle(.primary)
-                        Text("Mover/Copiar")
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                }
-                
-                // Imagen - Opciones inteligentes
-                Menu {
-                    if selectedImageData != nil {
-                        // Si tiene imagen: Editar y Eliminar
-                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
-                            Label("Tomar foto", systemImage: "camera.fill")
-                        }
-                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
-                            Label("Seleccionar de galería", systemImage: "photo.fill")
-                        }
-                        Divider()
-                        Button(role: .destructive, action: {
-                            selectedImageData = nil
-                            hasImageChanged = true
-                        }) {
-                            Label("Eliminar imagen", systemImage: "trash")
-                        }
-                    } else {
-                        // Si no tiene imagen: Solo agregar
-                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
-                            Label("Tomar foto", systemImage: "camera.fill")
-                        }
-                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
-                            Label("Seleccionar de galería", systemImage: "photo.fill")
-                        }
-                    }
-                } label: {
-                    HStack {
-                        if hasImageChanged && selectedImageData != nil {
-                            // Nueva imagen añadida o imagen actualizada
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text(folder.imageData == nil ? "Imagen Agregada" : "Imagen Actualizada")
-                                .foregroundStyle(.primary)
-                        } else if selectedImageData != nil {
-                            // Ya tenía imagen, no modificada
-                            Image(systemName: "photo.fill")
-                                .foregroundStyle(.primary)
-                            Text("Editar Imagen")
-                                .foregroundStyle(.primary)
+                        HapticManager.lightImpact()
+                        if let ancestorName = viewModel.getHiddenAncestorName(at: folderPath) {
+                            hiddenAncestorAlertName = ancestorName
+                            showingHiddenAncestorAlert = true
                         } else {
-                            Image(systemName: "photo")
-                                .foregroundStyle(.primary)
-                            Text("Agregar Imagen")
-                                .foregroundStyle(.primary)
+                            viewModel.toggleFolderHidden(folder: currentFolder, path: folderPath)
                         }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.secondary)
-                            .font(.caption)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
-                }
-                
-                // Botón Confirmar Edición
-                Button(action: {
-                    // Aplicar cambios
-                    if editedName != folder.name {
-                        viewModel.renameFolder(id: folder.id, newName: editedName)
-                    }
-                    
-                    if hasImageChanged || selectedImageData != folder.imageData {
-                        viewModel.updateFolderImage(imageData: selectedImageData, at: folderPath)
-                    }
-                    
-                    HapticManager.success()
-                    isPresented = false
-                }) {
-                    Text("Confirmar Edición")
-                        .font(.headline)
+                    }) {
+                        HStack {
+                            Image(systemName: currentFolder.isHidden ? "eye" : "eye.slash")
+                                .foregroundStyle(currentFolder.isHidden ? .green : .orange)
+                            Text(currentFolder.isHidden ? "Mostrar" : "Ocultar")
+                                .foregroundStyle(currentFolder.isHidden ? .green : .orange)
+                            Spacer()
+                        }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.blue)
-                        .foregroundColor(.white)
+                        .background(Color(.systemGray6))
                         .cornerRadius(10)
+                    }
+                    
+                    // Imagen
+                    if let imageData = selectedImageData, let uiImage = UIImage(data: imageData) {
+                        // Imagen existente - mostrar preview con menú contextual
+                        Menu {
+                            Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                                Label("Tomar foto", systemImage: "camera.fill")
+                            }
+                            Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                                Label("Seleccionar de galería", systemImage: "photo.fill")
+                            }
+                            Divider()
+                            Button(role: .destructive, action: {
+                                withAnimation {
+                                    selectedImageData = nil
+                                    hasImageChanged = true
+                                }
+                            }) {
+                                Label("Eliminar imagen", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(minWidth: 0, maxWidth: .infinity)
+                                .frame(height: 200)
+                                .clipped()
+                                .cornerRadius(12)
+                        }
+                    } else {
+                        // Sin imagen - botón para agregar
+                        Menu {
+                            Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                                Label("Tomar foto", systemImage: "camera.fill")
+                            }
+                            Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                                Label("Seleccionar de galería", systemImage: "photo.fill")
+                            }
+                        } label: {
+                            HStack {
+                                Image(systemName: "photo")
+                                    .foregroundStyle(.primary)
+                                Text("Agregar Imagen")
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(10)
+                        }
+                    }
+                    
+                    // Botón Confirmar Edición
+                    Button(action: {
+                        // Aplicar cambios
+                        if editedName != folder.name {
+                            viewModel.renameFolder(id: folder.id, newName: editedName)
+                        }
+                        
+                        if hasImageChanged || selectedImageData != folder.imageData {
+                            viewModel.updateFolderImage(imageData: selectedImageData, at: folderPath)
+                        }
+                        
+                        HapticManager.success()
+                        isPresented = false
+                    }) {
+                        Text("Confirmar Edición")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .padding(.top, 10)
                 }
-                .padding(.top, 10)
-                
-                Spacer()
+                .padding(20)
             }
-            .padding(20)
             .navigationTitle("Edición del Elemento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -202,7 +229,12 @@ struct EditElementSheet: View {
                     }
                 }, sourceType: request.sourceType)
             }
+            .alert("Elemento Protegido", isPresented: $showingHiddenAncestorAlert) {
+                Button("Ok", role: .cancel) { }
+            } message: {
+                Text("Para modificar la visibilidad de este elemento, debes desocultar: \(hiddenAncestorAlertName)")
+            }
         }
-        .presentationDetents([.fraction(0.5)])
+        .presentationDetents([selectedImageData != nil ? .fraction(0.85) : .fraction(0.6)])
     }
 }

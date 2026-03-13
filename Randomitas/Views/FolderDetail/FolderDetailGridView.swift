@@ -12,6 +12,10 @@ struct FolderDetailGridView: View {
     // removed FolderWrapper
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
+    let sortType: RandomitasViewModel.SortType
+    let isInHiddenContext: Bool
+    @Binding var showingHiddenAncestorAlert: Bool
+    @Binding var hiddenAncestorAlertName: String
     
     
     @Binding var editingElement: EditingInfo?
@@ -29,48 +33,129 @@ struct FolderDetailGridView: View {
     // Delete confirmation
     @State private var folderToDelete: Folder?
     
+    /// Whether to show alphabetical section headers
+    private var isAlphabeticalSort: Bool {
+        sortType == .nameAsc || sortType == .nameDesc
+    }
+    
+    /// Groups sorted subfolders by their first letter
+    private var groupedSubfolders: [(letter: String, folders: [Folder])] {
+        var groups: [(String, [Folder])] = []
+        var currentLetter = ""
+        var currentGroup: [Folder] = []
+        
+        for folder in sortedSubfolders {
+            let letter = viewModel.sectionLetter(for: folder)
+            if letter != currentLetter {
+                if !currentGroup.isEmpty {
+                    groups.append((currentLetter, currentGroup))
+                }
+                currentLetter = letter
+                currentGroup = [folder]
+            } else {
+                currentGroup.append(folder)
+            }
+        }
+        if !currentGroup.isEmpty {
+            groups.append((currentLetter, currentGroup))
+        }
+        return groups
+    }
+    
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
-                    if !sortedSubfolders.isEmpty {
-                        ForEach(sortedSubfolders, id: \.id) { subfolder in
-                            ZStack {
-                                gridFolderCell(subfolder)
-                                    .id(subfolder.id)
-                                    .overlay(
-                                        ZStack {
-                                            if isSelectionMode {
-                                                VStack {
-                                                    HStack {
-                                                        Spacer()
-                                                        Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
-                                                            .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .white)
-                                                            .background(selectedItemIds.contains(subfolder.id) ? Color.white : Color.black.opacity(0.3))
-                                                            .clipShape(Circle())
-                                                            .font(.system(size: 24))
-                                                            .padding(6)
+                if isAlphabeticalSort && !sortedSubfolders.isEmpty {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(groupedSubfolders, id: \.letter) { group in
+                            // Section letter header
+                            Text(group.letter)
+                                .font(.headline.bold())
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal, 4)
+                                .padding(.top, group.letter == groupedSubfolders.first?.letter ? 0 : 8)
+                            
+                            // Grid for this section
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+                                ForEach(group.folders, id: \.id) { subfolder in
+                                    ZStack {
+                                        gridFolderCell(subfolder)
+                                            .id(subfolder.id)
+                                            .overlay(
+                                                ZStack {
+                                                    if isSelectionMode {
+                                                        VStack {
+                                                            HStack {
+                                                                Spacer()
+                                                                Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
+                                                                    .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .white)
+                                                                    .background(selectedItemIds.contains(subfolder.id) ? Color.white : Color.black.opacity(0.3))
+                                                                    .clipShape(Circle())
+                                                                    .font(.system(size: 24))
+                                                                    .padding(6)
+                                                            }
+                                                            Spacer()
+                                                        }
                                                     }
-                                                    Spacer()
+                                                }
+                                            )
+                                            .onTapGesture {
+                                                if isSelectionMode {
+                                                    if selectedItemIds.contains(subfolder.id) {
+                                                        selectedItemIds.remove(subfolder.id)
+                                                    } else {
+                                                        selectedItemIds.insert(subfolder.id)
+                                                    }
                                                 }
                                             }
-                                        }
-                                    )
-                                    .onTapGesture {
-                                        if isSelectionMode {
-                                            if selectedItemIds.contains(subfolder.id) {
-                                                selectedItemIds.remove(subfolder.id)
-                                            } else {
-                                                selectedItemIds.insert(subfolder.id)
-                                            }
-                                        }
                                     }
+                                }
                             }
                         }
                     }
+                    .padding()
+                    .padding(.bottom, 80)
+                } else {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 3), spacing: 12) {
+                        if !sortedSubfolders.isEmpty {
+                            ForEach(sortedSubfolders, id: \.id) { subfolder in
+                                ZStack {
+                                    gridFolderCell(subfolder)
+                                        .id(subfolder.id)
+                                        .overlay(
+                                            ZStack {
+                                                if isSelectionMode {
+                                                    VStack {
+                                                        HStack {
+                                                            Spacer()
+                                                            Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
+                                                                .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .white)
+                                                                .background(selectedItemIds.contains(subfolder.id) ? Color.white : Color.black.opacity(0.3))
+                                                                .clipShape(Circle())
+                                                                .font(.system(size: 24))
+                                                                .padding(6)
+                                                        }
+                                                        Spacer()
+                                                    }
+                                                }
+                                            }
+                                        )
+                                        .onTapGesture {
+                                            if isSelectionMode {
+                                                if selectedItemIds.contains(subfolder.id) {
+                                                    selectedItemIds.remove(subfolder.id)
+                                                } else {
+                                                    selectedItemIds.insert(subfolder.id)
+                                                }
+                                            }
+                                        }
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                    .padding(.bottom, 80)
                 }
-                .padding()
-                .padding(.bottom, 80)
             }
             .refreshable {
                 await MainActor.run {
@@ -147,24 +232,7 @@ struct FolderDetailGridView: View {
                         } else {
                             LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                                 .frame(height: 100)
-                                .overlay(Image(systemName: "atom").font(.system(size: 32)).foregroundColor(.blue))
-                        }
-                        
-                        // Indicador de carpeta oculta (esquina superior derecha)
-                        if subfolder.isHidden {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "eye.slash")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.white)
-                                        .padding(5)
-                                        .background(Color.black.opacity(0.6))
-                                        .clipShape(Circle())
-                                }
-                                Spacer()
-                            }
-                            .padding(6)
+                                .overlay(Image(systemName: subfolder.isHidden ? "eye.slash" : "atom").font(.system(size: 32)).foregroundColor(subfolder.isHidden ? .orange : .blue))
                         }
                     }
                     .frame(height: 100)
@@ -200,9 +268,20 @@ struct FolderDetailGridView: View {
                     Label("Editar", systemImage: "pencil")
                 }
                 Button {
-                    viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                    if isInHiddenContext {
+                        if let ancestorName = viewModel.getHiddenAncestorName(at: folderPath + [validIdx]) ?? viewModel.getFolderFromPath(folderPath).flatMap({ $0.isHidden ? $0.name : nil }) {
+                            hiddenAncestorAlertName = ancestorName
+                            showingHiddenAncestorAlert = true
+                        }
+                    } else {
+                        viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                    }
                 } label: {
-                    Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                    if isInHiddenContext {
+                        Label("Mostrar", systemImage: "eye")
+                    } else {
+                        Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                    }
                 }
                 Button(role: .destructive) {
                     folderToDelete = subfolder
@@ -215,7 +294,7 @@ struct FolderDetailGridView: View {
             VStack(spacing: 8) {
                 LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                     .frame(height: 100)
-                    .overlay(Image(systemName: "atom").font(.system(size: 32)).foregroundColor(.gray))
+                    .overlay(Image(systemName: "eye.slash").font(.system(size: 32)).foregroundColor(.orange))
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                 
                 Text(subfolder.name)

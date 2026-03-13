@@ -19,31 +19,43 @@ struct NewFolderSheet: View {
     @State private var imagePickerRequest: ImagePickerRequest?
     @State private var selectedImageData: Data?
     @State private var createdCount: Int = 0 // Track items created in batch mode
+    @State private var createdNames: [String] = [] // Track names of created items
+    @State private var showCreatedListPopup: Bool = false
     @State private var showDuplicateAlert: Bool = false
     @State private var showEmptyNameAlert: Bool = false
+    @FocusState private var isNameFieldFocused: Bool
     
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 20) {
                 // Batch mode indicator
                 if batchMode && createdCount > 0 {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("\(createdCount) elemento\(createdCount > 1 ? "s" : "") creado\(createdCount > 1 ? "s" : "")")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.secondary)
+                    Button(action: {
+                        showCreatedListPopup = true
+                    }) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                            Text("\(createdCount) elemento\(createdCount > 1 ? "s" : "") creado\(createdCount > 1 ? "s" : "")")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundColor(.secondary.opacity(0.6))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.green.opacity(0.1))
+                        .clipShape(Capsule())
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(Capsule())
-                    .padding(.bottom, -10) // Reduce extra space from indicator
+                    .padding(.bottom, -10)
                 }
                 
                 // Input Fields
                 VStack(spacing: 15) {
                     TextField("Nombre del Elemento", text: $name)
+                        .focused($isNameFieldFocused)
                         .padding()
                         .background(Color(.systemGray6))
                         .cornerRadius(10)
@@ -54,38 +66,58 @@ struct NewFolderSheet: View {
                         .cornerRadius(10)
                 }
                 
-                // Image Picker
-                Menu {
-                    Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
-                        Label("Tomar foto", systemImage: "camera.fill")
-                    }
-                    Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
-                        Label("Seleccionar de galería", systemImage: "photo.fill")
-                    }
-                    if selectedImageData != nil {
+                // Imagen
+                if let imageData = selectedImageData, let uiImage = UIImage(data: imageData) {
+                    // Imagen existente - mostrar preview con menú contextual
+                    Menu {
+                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                            Label("Tomar foto", systemImage: "camera.fill")
+                        }
+                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                            Label("Seleccionar de galería", systemImage: "photo.fill")
+                        }
                         Divider()
-                        Button(role: .destructive, action: { selectedImageData = nil }) {
+                        Button(role: .destructive, action: {
+                            withAnimation {
+                                selectedImageData = nil
+                            }
+                        }) {
                             Label("Eliminar imagen", systemImage: "trash")
                         }
+                    } label: {
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(minWidth: 0, maxWidth: .infinity)
+                            .frame(height: 200)
+                            .clipped()
+                            .cornerRadius(12)
                     }
-                } label: {
-                    HStack {
-                        if selectedImageData != nil {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text("Imagen Agregada")
-                                .foregroundStyle(.primary)
-                        } else {
+                } else {
+                    // Sin imagen - botón para agregar
+                    Menu {
+                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .camera) }) {
+                            Label("Tomar foto", systemImage: "camera.fill")
+                        }
+                        Button(action: { imagePickerRequest = ImagePickerRequest(sourceType: .photoLibrary) }) {
+                            Label("Seleccionar de galería", systemImage: "photo.fill")
+                        }
+                    } label: {
+                        HStack {
                             Image(systemName: "photo")
                                 .foregroundStyle(.primary)
                             Text("Agregar Imagen")
                                 .foregroundStyle(.primary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(.secondary)
+                                .font(.caption)
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(10)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color(.systemGray6))
-                    .cornerRadius(10)
                 }
                 
                 // Creation Button
@@ -93,6 +125,7 @@ struct NewFolderSheet: View {
                     // Check for empty name
                     if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         HapticManager.error()
+                        isNameFieldFocused = false
                         showEmptyNameAlert = true
                         return
                     }
@@ -113,6 +146,7 @@ struct NewFolderSheet: View {
                     
                     if existingNames.contains(nameToCheck.lowercased()) {
                         HapticManager.error()
+                        isNameFieldFocused = false
                         showDuplicateAlert = true
                         return
                     }
@@ -129,6 +163,7 @@ struct NewFolderSheet: View {
                     if batchMode {
                         // Reset fields for next creation
                         createdCount += 1
+                        createdNames.append(nameToCheck)
                         name = ""
                         isFavorite = false
                         selectedImageData = nil
@@ -153,6 +188,7 @@ struct NewFolderSheet: View {
                 .padding(.top, 10)
             }
             .padding(20)
+            }
             .navigationTitle(batchMode ? "Nuevo Elemento" : "Nuevo Elemento")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -168,6 +204,12 @@ struct NewFolderSheet: View {
                             Text("Nuevo Elemento")
                                 .font(.headline)
                         }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Cancelar") {
+                            isPresented = false
+                        }
+                        .foregroundColor(.red)
                     }
                 }
             }
@@ -206,8 +248,13 @@ struct NewFolderSheet: View {
             } message: {
                 Text("Por favor ingresa un nombre para el elemento")
             }
+            .alert("Elementos Creados", isPresented: $showCreatedListPopup) {
+                Button("Ok", role: .cancel) { }
+            } message: {
+                Text(createdNames.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"))
+            }
         }
-        .presentationDetents([.fraction(0.45)])
+        .presentationDetents([selectedImageData != nil ? .fraction(0.75) : .fraction(0.45)])
         .onAppear {
             // Haptic feedback: double for batch mode, single for individual
             if batchMode {
