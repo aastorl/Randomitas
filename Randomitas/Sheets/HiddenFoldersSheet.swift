@@ -27,9 +27,9 @@ struct HiddenFoldersSheet: View {
         case .nameDesc:
             return hiddenFolders.sorted { viewModel.sortName(for: $0.folder.name).localizedStandardCompare(viewModel.sortName(for: $1.folder.name)) == .orderedDescending }
         case .dateNewest:
-            return hiddenFolders.sorted { ($0.folder.createdAt ?? Date.distantPast) > ($1.folder.createdAt ?? Date.distantPast) }
+            return hiddenFolders.sorted { $0.folder.createdAt > $1.folder.createdAt }
         case .dateOldest:
-            return hiddenFolders.sorted { ($0.folder.createdAt ?? Date.distantPast) < ($1.folder.createdAt ?? Date.distantPast) }
+            return hiddenFolders.sorted { $0.folder.createdAt < $1.folder.createdAt }
         }
     }
     

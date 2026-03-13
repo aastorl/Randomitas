@@ -36,9 +36,9 @@ struct FavoritesSheet: View {
         case .nameDesc:
             sorted = validFavorites.sorted { viewModel.sortName(for: $0.folder.name).localizedStandardCompare(viewModel.sortName(for: $1.folder.name)) == .orderedDescending }
         case .dateNewest:
-            sorted = validFavorites.sorted { ($0.folder.createdAt ?? Date.distantPast) > ($1.folder.createdAt ?? Date.distantPast) }
+            sorted = validFavorites.sorted { $0.folder.createdAt > $1.folder.createdAt }
         case .dateOldest:
-            sorted = validFavorites.sorted { ($0.folder.createdAt ?? Date.distantPast) < ($1.folder.createdAt ?? Date.distantPast) }
+            sorted = validFavorites.sorted { $0.folder.createdAt < $1.folder.createdAt }
         }
         
         return sorted
