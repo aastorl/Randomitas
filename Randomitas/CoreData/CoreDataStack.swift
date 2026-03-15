@@ -6,22 +6,33 @@
 //
 
 import CoreData
+import os
 
+@MainActor
 class CoreDataStack {
     static let shared = CoreDataStack()
+    static func makeInMemory() -> CoreDataStack {
+        CoreDataStack(inMemory: true)
+    }
     
     let container: NSPersistentContainer
+    private let logger = Logger(subsystem: "Randomitas", category: "CoreDataStack")
     
     var context: NSManagedObjectContext {
         container.viewContext
     }
     
-    init() {
+    init(inMemory: Bool = false) {
         container = NSPersistentContainer(name: "Randomitas")
+        if inMemory {
+            let description = NSPersistentStoreDescription()
+            description.type = NSInMemoryStoreType
+            container.persistentStoreDescriptions = [description]
+        }
         
         container.loadPersistentStores { description, error in
             if let error = error as NSError? {
-                print("Core Data Error: \(error), \(error.userInfo)")
+                self.logger.error("Core Data Error: \(error.localizedDescription, privacy: .public)")
             }
         }
         
@@ -29,7 +40,9 @@ class CoreDataStack {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         
         // Clean database on first launch after restructuring to folders-only
-        cleanDatabaseIfNeeded()
+        if !inMemory {
+            cleanDatabaseIfNeeded()
+        }
     }
     
     private func cleanDatabaseIfNeeded() {
@@ -37,7 +50,7 @@ class CoreDataStack {
         let userDefaults = UserDefaults.standard
         
         if !userDefaults.bool(forKey: hasCleanedKey) {
-            print("🧹 Cleaning database for folders-only restructure...")
+            logger.info("Cleaning database for folders-only restructure...")
             
             let context = container.viewContext
             
@@ -50,9 +63,9 @@ class CoreDataStack {
                 
                 do {
                     try context.execute(deleteRequest)
-                    print("✅ Deleted all \(entityName)")
+                    logger.info("Deleted all \(entityName, privacy: .public)")
                 } catch {
-                    print("❌ Error deleting \(entityName): \(error)")
+                    logger.error("Error deleting \(entityName, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 }
             }
             
@@ -60,9 +73,9 @@ class CoreDataStack {
             do {
                 try context.save()
                 userDefaults.set(true, forKey: hasCleanedKey)
-                print("✅ Database cleaned successfully")
+                logger.info("Database cleaned successfully")
             } catch {
-                print("❌ Error saving after cleanup: \(error)")
+                logger.error("Error saving after cleanup: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -73,10 +86,10 @@ class CoreDataStack {
         if context.hasChanges {
             do {
                 try context.save()
-                print("✅ Core Data guardado")
+                logger.info("Core Data guardado")
             } catch {
                 let error = error as NSError
-                print("❌ Error guardando Core Data: \(error)")
+                logger.error("Error guardando Core Data: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

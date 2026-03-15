@@ -33,6 +33,7 @@ struct EditElementSheet: View {
     @Binding var moveCopyOperation: MoveCopyOperation?
     @State private var showingHiddenAncestorAlert = false
     @State private var hiddenAncestorAlertName = ""
+    @State private var validationErrorMessage: String? = nil
     
     init(viewModel: RandomitasViewModel, isPresented: Binding<Bool>, folder: Folder, folderPath: [Int], moveCopyOperation: Binding<MoveCopyOperation?>) {
         self.viewModel = viewModel
@@ -173,7 +174,21 @@ struct EditElementSheet: View {
                     Button(action: {
                         // Aplicar cambios
                         if editedName != folder.name {
-                            viewModel.renameFolder(id: folder.id, newName: editedName)
+                            let validator = FolderNameValidator()
+                            let siblings: [Folder]
+                            if folderPath.count >= 2, let parent = viewModel.getFolderFromPath(Array(folderPath.dropLast())) {
+                                siblings = parent.subfolders.filter { $0.id != folder.id }
+                            } else {
+                                siblings = viewModel.folders.filter { $0.id != folder.id }
+                            }
+                            switch validator.validate(editedName, siblings: siblings) {
+                            case .success(let validName):
+                                viewModel.renameFolder(id: folder.id, newName: validName)
+                            case .failure(let error):
+                                validationErrorMessage = error.localizedDescription
+                                HapticManager.error()
+                                return
+                            }
                         }
                         
                         if hasImageChanged || selectedImageData != folder.imageData {
@@ -201,6 +216,16 @@ struct EditElementSheet: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancelar") { isPresented = false }
                 }
+            }
+            .alert("Nombre inválido", isPresented: Binding(
+                get: { validationErrorMessage != nil },
+                set: { if !$0 { validationErrorMessage = nil } }
+            )) {
+                Button("Ok", role: .cancel) {
+                    validationErrorMessage = nil
+                }
+            } message: {
+                Text(validationErrorMessage ?? "")
             }
             // Camera - fullscreen cover
             .fullScreenCover(item: Binding(

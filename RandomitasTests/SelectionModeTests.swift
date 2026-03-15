@@ -16,7 +16,7 @@ struct SelectionModeTests {
     
     @Test func testBatchDeleteRootFolders() async throws {
         // Given: A viewModel with multiple root folders
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         // Create test folders
         viewModel.addRootFolder(name: "Test1")
@@ -41,7 +41,7 @@ struct SelectionModeTests {
     
     @Test func testBatchDeleteSubfolders() async throws {
         // Given: A viewModel with a parent folder containing subfolders
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         // Create parent folder
         viewModel.addRootFolder(name: "Parent")
@@ -79,7 +79,7 @@ struct SelectionModeTests {
     
     @Test func testBatchToggleHiddenRoot() async throws {
         // Given: A viewModel with root folders
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "Visible1")
         viewModel.addRootFolder(name: "Visible2")
@@ -109,7 +109,7 @@ struct SelectionModeTests {
     
     @Test func testBatchToggleHiddenSubfolders() async throws {
         // Given: A viewModel with subfolders
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "Parent")
         let parentPath = [viewModel.folders.count - 1]
@@ -223,7 +223,7 @@ struct SelectionModeTests {
     
     @Test func testMoveFolderById() async throws {
         // Given: A viewModel with folders
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         // Create source and target folders
         viewModel.addRootFolder(name: "Source")
@@ -253,7 +253,7 @@ struct SelectionModeTests {
     
     @Test func testMoveFolderByIdToRoot() async throws {
         // Given: A viewModel with nested folder
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "Parent")
         let parentPath = [viewModel.folders.count - 1]
@@ -279,7 +279,7 @@ struct SelectionModeTests {
     
     @Test func testCopyFolderById() async throws {
         // Given: A viewModel with folders
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "Original")
         viewModel.addRootFolder(name: "Target")
@@ -316,7 +316,7 @@ struct SelectionModeTests {
     
     @Test func testAddRootFolderWithFavorite() async throws {
         // Given: A viewModel
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         // When: Creating a root folder with isFavorite = true
         viewModel.addRootFolder(name: "FavRoot", isFavorite: true)
@@ -338,7 +338,7 @@ struct SelectionModeTests {
     
     @Test func testAddSubfolderWithFavorite() async throws {
         // Given: A viewModel with a parent folder
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "Parent")
         let parentPath = [viewModel.folders.count - 1]

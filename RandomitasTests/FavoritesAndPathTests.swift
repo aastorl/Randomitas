@@ -15,7 +15,7 @@ struct FavoritesAndPathTests {
     // MARK: - findPathById Tests
     
     @Test func testFindPathByIdRootFolder() async throws {
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "FindMe")
         
@@ -39,7 +39,7 @@ struct FavoritesAndPathTests {
     }
     
     @Test func testFindPathByIdNestedFolder() async throws {
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "Parent")
         let parentPath = [viewModel.folders.count - 1]
@@ -70,7 +70,7 @@ struct FavoritesAndPathTests {
     }
     
     @Test func testFindPathByIdNonExistent() async throws {
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         let fakeId = UUID()
         let path = viewModel.findPathById(fakeId)
@@ -80,7 +80,7 @@ struct FavoritesAndPathTests {
     
     @Test func testFindPathByIdAfterReorder() async throws {
         // This tests the core bug fix: paths should update when elements are added/deleted
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "AAA")
         viewModel.addRootFolder(name: "BBB")
@@ -127,7 +127,7 @@ struct FavoritesAndPathTests {
     
     @Test func testFavoritesSurviveAfterDeletion() async throws {
         // Core test: favorites should NOT disappear when other elements are deleted
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "WillDelete")
         viewModel.addRootFolder(name: "WillKeep")
@@ -168,7 +168,7 @@ struct FavoritesAndPathTests {
     
     @Test func testHiddenRemovesFavorite() async throws {
         // When hiding a folder, it should be removed from favorites
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "TestHideFav")
         
@@ -193,7 +193,7 @@ struct FavoritesAndPathTests {
     }
     
     @Test func testCannotFavoriteHiddenFolder() async throws {
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         viewModel.addRootFolder(name: "HiddenFirst")
         
@@ -219,7 +219,7 @@ struct FavoritesAndPathTests {
     // MARK: - Deep Nesting Tests
     
     @Test func testFindPathByIdDeeplyNested() async throws {
-        let viewModel = RandomitasViewModel()
+        let viewModel = makeTestViewModel()
         
         // Create: Root > Level1 > Level2 > Level3
         viewModel.addRootFolder(name: "Root")

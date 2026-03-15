@@ -16,6 +16,7 @@ struct FolderDetailGalleryView: View {
     let isInHiddenContext: Bool
     @Binding var showingHiddenAncestorAlert: Bool
     @Binding var hiddenAncestorAlertName: String
+    @Binding var showHiddenFavoriteAlert: Bool
     
     
     @Binding var editingElement: EditingInfo?
@@ -223,7 +224,9 @@ struct FolderDetailGalleryView: View {
                 }
             }
             .contextMenu {
-                Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx]) } label: {
+                Button {
+                    showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx])
+                } label: {
                     Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
                 }
                 Button {

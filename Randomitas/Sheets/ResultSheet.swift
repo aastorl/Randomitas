@@ -14,6 +14,7 @@ struct ResultSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     var navigateToFullPath: ([Int]) -> Void
     @Binding var highlightedItemId: UUID?
+    @Binding var showHiddenFavoriteAlert: Bool
     
     var currentFolder: Folder {
         if let foundFolder = viewModel.findFolder(at: path) {
@@ -144,7 +145,7 @@ struct ResultSheet: View {
                                     // Favorito
                                     Button(action: {
                                         HapticManager.lightImpact()
-                                        viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
+                                        showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
                                     }) {
                                         HStack(spacing: 4) {
                                             Image(systemName: isFavorite ? "star.fill" : "star")
@@ -272,7 +273,7 @@ struct ResultSheet: View {
         }
         .presentationDetents(currentFolder.imageData != nil ? [.height(280), .height(620)] : [.height(280)], selection: $selectedDetent)
         .presentationContentInteraction(.scrolls)
-        .alert("Elemento Oculto", isPresented: $viewModel.showHiddenFavoriteAlert) {
+        .alert("Elemento Oculto", isPresented: $showHiddenFavoriteAlert) {
             Button("Ok", role: .cancel) { }
         } message: {
             Text("Los elementos ocultos no pueden ser favoritos. Desoculta este elemento primero.")
@@ -373,7 +374,7 @@ struct ResultSheet: View {
     private var favoriteButton: some View {
         Button {
             HapticManager.lightImpact()
-            viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
+            showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: currentFolder, path: path)
         } label: {
             Label(isFavorite ? "Favorito" : "Agregar",
                   systemImage: isFavorite ? "star.fill" : "star")

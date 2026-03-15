@@ -15,14 +15,12 @@ struct HistorySheet: View {
     
     @State private var showingPathPopup: (name: String, path: String, timestamp: Date)? = nil
     
-    private var validHistory: [HistoryEntry] {
+    private var validHistory: [(entry: HistoryEntry, path: [Int])] {
         viewModel.history
             .sorted { $0.timestamp > $1.timestamp }
-            .filter { entry in
-                if let folder = viewModel.getFolderFromPath(entry.folderPath) {
-                    return folder.id == entry.itemId
-                }
-                return false
+            .compactMap { entry in
+                guard let path = viewModel.findPathById(entry.itemId) else { return nil }
+                return (entry, path)
             }
     }
     
@@ -38,9 +36,11 @@ struct HistorySheet: View {
                     )
                 } else {
                     List {
-                        ForEach(validHistory) { entry in
+                        ForEach(validHistory, id: \.entry.id) { item in
+                            let entry = item.entry
+                            let path = item.path
                             let pathString = reversePathString(entry.path, itemName: entry.itemName)
-                            let inheritedImage = viewModel.getInheritedImageData(for: entry.folderPath)
+                            let inheritedImage = viewModel.getInheritedImageData(for: path)
                             
                             SheetRowView(
                                 name: entry.itemName,
@@ -48,7 +48,7 @@ struct HistorySheet: View {
                                 onTap: {
                                     if let navigate = navigateToFullPath {
                                         highlightedItemId = entry.itemId
-                                        navigate(entry.folderPath)
+                                        navigate(path)
                                         isPresented = false
                                     }
                                 },
@@ -61,7 +61,7 @@ struct HistorySheet: View {
                             .listRowBackground(Color(.systemBackground).opacity(0.7))
                         }
                         .onDelete { indices in
-                            let validEntries = validHistory
+                            let validEntries = validHistory.map { $0.entry }
                             for index in indices {
                                 if index < validEntries.count {
                                     viewModel.removeHistoryEntry(id: validEntries[index].id)

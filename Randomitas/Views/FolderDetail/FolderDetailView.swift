@@ -5,6 +5,8 @@
 //  Created by Astor Ludueña on 14/11/2025.
 internal import SwiftUI
 internal import Combine
+internal import Combine
+
 
 struct FolderDetailView: View {
     let folder: Folder // Now a plain Folder struct (Root or Subfolder)
@@ -13,21 +15,8 @@ struct FolderDetailView: View {
     @Environment(\.dismiss) var dismiss
     
     var highlightedItemId: UUID? = nil
-    
-    @State var showingNewFolderSheet = false
-    @State var isBatchAddMode = false // New: batch add mode flag
-    @State var showingRenameSheet = false
-    @State var renameTarget: (id: UUID, name: String, type: String)?
-    @State var currentViewType: RandomitasViewModel.ViewType = .list
-    @State var currentSortType: RandomitasViewModel.SortType = .nameAsc
-    @State var imagePickerRequest: ImagePickerRequest?
-    @State var showingFavorites = false
-    @State var showingHistory = false
-    @State var showingHiddenFolders = false
-    @State var showingHiddenElements = false // Toggle for hidden elements view
-    @State var moveCopyOperation: MoveCopyOperation?
-    @State private var showingHiddenAncestorAlert = false
-    @State private var hiddenAncestorAlertName = ""
+
+    @StateObject private var uiState = FolderDetailViewState()
     
     /// True if the current folder or any ancestor is hidden
     var isInHiddenContext: Bool {
@@ -35,34 +24,11 @@ struct FolderDetailView: View {
         return viewModel.isHiddenOrHasHiddenAncestor(at: folderPath)
     }
     
-    @State private var isSelectionMode = false
-    @State private var selectedItemIds = Set<UUID>()
-    @State private var showingMultiDeleteConfirmation = false
 
-    @State private var pickerID = UUID()
-    @State private var showLabel = false
-    @State private var longPressDetected = false
-    @State private var isPressedPlusButton = false
-    @State private var toolbarReady = false
-    
-    // Edit Sheet State
-    @State private var editingElement: EditingInfo?
-    
-    // Search State (Global for Root, local context for sub?)
-    // Actually search is usually global.
-    @State private var isSearching = false
-    @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     
     // Folder Result State
-    @State private var selectedFolderResult: (folder: Folder, path: [Int])?
-    @State private var showingFolderResult = false
     @Binding var navigationPath: NavigationPath
-    @State private var navigationHighlightedItemId: UUID?
-    @State private var showFirstElementAlert = false
-    @State private var showingHiddenRandomizeAlert = false
-    @State private var showingEmptyRandomizeAlert = false
-    @State private var showingInfo = false
     
     // Dynamic access to live data
     var liveFolder: Folder {
@@ -74,10 +40,10 @@ struct FolderDetailView: View {
     
     var sortedSubfolders: [Folder] {
         let allSubfolders = liveFolder.subfolders
-        let filtered = showingHiddenElements 
+        let filtered = uiState.showingHiddenElements 
             ? allSubfolders.filter { $0.isHidden }
             : allSubfolders.filter { !$0.isHidden }
-        return viewModel.sortFolders(filtered, by: currentSortType)
+        return viewModel.sortFolders(filtered, by: uiState.currentSortType)
     }
     
     /// Gets the image data for blur background, checking current folder first then ancestors
@@ -114,1133 +80,320 @@ struct FolderDetailView: View {
     }
     
     var body: some View {
+        viewWithLifecycle
+    }
+
+    private var viewWithLifecycle: some View {
+        viewWithAlerts
+            .onAppear {
+                uiState.currentViewType = viewModel.getViewType(for: folderPath.isEmpty ? nil : liveFolder.id)
+                uiState.currentSortType = viewModel.getSortType(for: folderPath.isEmpty ? nil : liveFolder.id)
+                uiState.showingHiddenElements = viewModel.getShowingHiddenElements(for: folderPath)
+                // Forzar re-render para que los gestos se registren correctamente
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    uiState.toolbarReady = true
+                }
+            }
+            .onReceive(viewModel.$lastError) { error in
+                guard let error = error else { return }
+                uiState.errorMessage = error.localizedDescription
+                uiState.showingErrorAlert = true
+                viewModel.lastError = nil
+            }
+    }
+
+    private var viewWithAlerts: some View {
+        viewWithSheets
+            .confirmationDialog("¿Estás seguro?", isPresented: $uiState.showingMultiDeleteConfirmation, titleVisibility: .visible) {
+                Button("Eliminar \(uiState.selectedItemIds.count) elementos", role: .destructive) {
+                    if folderPath.isEmpty {
+                        viewModel.batchDeleteRootFolders(ids: uiState.selectedItemIds)
+                    } else {
+                        viewModel.batchDeleteSubfolders(ids: uiState.selectedItemIds, from: folderPath)
+                    }
+                    uiState.isSelectionMode = false
+                    uiState.selectedItemIds.removeAll()
+                }
+                Button("Cancelar", role: .cancel) {}
+            } message: {
+                Text("Esta acción no se puede deshacer.")
+            }
+            .modifier(AlertsModifier(
+                showFirstElementAlert: $uiState.showFirstElementAlert,
+                showingEmptyRandomizeAlert: $uiState.showingEmptyRandomizeAlert,
+                showingHiddenAncestorAlert: $uiState.showingHiddenAncestorAlert,
+                hiddenAncestorAlertName: uiState.hiddenAncestorAlertName,
+                showingHiddenRandomizeAlert: $uiState.showingHiddenRandomizeAlert,
+                showHiddenFavoriteAlert: $uiState.showHiddenFavoriteAlert
+            ))
+            .alert("Error", isPresented: $uiState.showingErrorAlert) {
+                Button("Ok", role: .cancel) { }
+            } message: {
+                Text(uiState.errorMessage ?? "Ha ocurrido un error inesperado")
+            }
+    }
+
+    private var viewWithSheets: some View {
+        viewWithImagePickers
+            .sheet(item: $uiState.moveCopyOperation) { operation in
+                MoveCopySheet(
+                    viewModel: viewModel,
+                    isPresented: Binding(
+                        get: { uiState.moveCopyOperation != nil },
+                        set: { if !$0 { uiState.moveCopyOperation = nil } }
+                    ),
+                    foldersToMove: operation.items,
+                    sourceContainerPath: operation.sourceContainerPath,
+                    isCopy: operation.isCopy,
+                    onSuccess: {
+                        uiState.isSelectionMode = false
+                        uiState.selectedItemIds.removeAll()
+                    }
+                )
+            }
+    }
+
+    private var viewWithImagePickers: some View {
+        viewWithPrimarySheets
+            // Camera - fullscreen cover
+            .fullScreenCover(item: Binding(
+                get: { uiState.imagePickerRequest?.isFullScreen == true ? uiState.imagePickerRequest : nil },
+                set: { uiState.imagePickerRequest = $0 }
+            )) { request in
+                ImagePickerView(onImagePicked: { image in
+                    let resizedImage = image.resized(toMaxDimension: 1024)
+                    if let data = resizedImage.jpegData(compressionQuality: 0.8) {
+                        viewModel.updateFolderImage(imageData: data, at: folderPath)
+                    }
+                }, sourceType: request.sourceType)
+                .ignoresSafeArea()
+            }
+            // Photo Library - sheet
+            .sheet(item: Binding(
+                get: { uiState.imagePickerRequest?.isFullScreen == false ? uiState.imagePickerRequest : nil },
+                set: { uiState.imagePickerRequest = $0 }
+            )) { request in
+                ImagePickerView(onImagePicked: { image in
+                    let resizedImage = image.resized(toMaxDimension: 1024)
+                    if let data = resizedImage.jpegData(compressionQuality: 0.8) {
+                        viewModel.updateFolderImage(imageData: data, at: folderPath)
+                    }
+                }, sourceType: request.sourceType)
+            }
+    }
+
+    private var viewWithPrimarySheets: some View {
+        viewWithToolbar
+            .sheet(isPresented: $uiState.showingNewFolderSheet) {
+                NewFolderSheet(
+                    viewModel: viewModel,
+                    folderPath: folderPath.isEmpty ? nil : folderPath,
+                    isPresented: $uiState.showingNewFolderSheet,
+                    batchMode: uiState.isBatchAddMode
+                )
+                .id(uiState.isBatchAddMode)
+            }
+            .sheet(isPresented: $uiState.showingFolderResult) {
+                if let folderResult = uiState.selectedFolderResult {
+                    ResultSheet(
+                        folder: folderResult.folder,
+                        path: folderResult.path,
+                        isPresented: $uiState.showingFolderResult,
+                        viewModel: viewModel,
+                        navigateToFullPath: navigateToFullPath,
+                        highlightedItemId: $uiState.navigationHighlightedItemId,
+                        showHiddenFavoriteAlert: $uiState.showHiddenFavoriteAlert
+                    )
+                }
+            }
+            .sheet(isPresented: $uiState.showingFavorites) {
+                FavoritesSheet(
+                    viewModel: viewModel,
+                    isPresented: $uiState.showingFavorites,
+                    navigateToFullPath: navigateToFullPath,
+                    highlightedItemId: $uiState.navigationHighlightedItemId,
+                    currentPath: .constant(folderPath)
+                )
+            }
+            .sheet(isPresented: $uiState.showingHistory) {
+                HistorySheet(
+                    viewModel: viewModel,
+                    isPresented: $uiState.showingHistory,
+                    navigateToFullPath: navigateToFullPath,
+                    highlightedItemId: $uiState.navigationHighlightedItemId
+                )
+            }
+            .sheet(isPresented: $uiState.showingHiddenFolders) {
+                HiddenFoldersSheet(
+                    viewModel: viewModel,
+                    isPresented: $uiState.showingHiddenFolders,
+                    navigateToFullPath: navigateToFullPath,
+                    highlightedItemId: $uiState.navigationHighlightedItemId
+                )
+            }
+            .sheet(item: $uiState.editingElement) { element in
+                EditElementSheet(
+                    viewModel: viewModel,
+                    isPresented: Binding(
+                        get: { uiState.editingElement != nil },
+                        set: { if !$0 { uiState.editingElement = nil } }
+                    ),
+                    folder: element.folder,
+                    folderPath: element.path,
+                    moveCopyOperation: $uiState.moveCopyOperation
+                )
+            }
+    }
+
+    private var viewWithToolbar: some View {
+        viewWithNavigation
+            .navigationTitle(liveFolder.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                FolderDetailNavBarContent(
+                    viewModel: viewModel,
+                    uiState: uiState,
+                    liveFolder: liveFolder,
+                    folderPath: folderPath,
+                    sortedSubfolders: sortedSubfolders,
+                    isInHiddenContext: isInHiddenContext,
+                    isSearchFocused: $isSearchFocused
+                )
+            }
+    }
+
+    private var viewWithNavigation: some View {
+        mainLayout
+            .navigationDestination(for: FolderDestination.self) { destination in
+                if let folder = viewModel.getFolderFromPath(destination.path) {
+                    FolderDetailView(
+                        folder: folder,
+                        folderPath: destination.path,
+                        viewModel: viewModel,
+                        highlightedItemId: uiState.navigationHighlightedItemId,
+                        navigationPath: $navigationPath
+                    )
+                }
+            }
+            .navigationDestination(isPresented: $uiState.showingInfo) {
+                WelcomeOnboardingView(mode: .info, onDismiss: {
+                    uiState.showingInfo = false
+                })
+            }
+    }
+
+    private var mainLayout: some View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
-            
-            VStack(spacing: 0) {
-                // TOOLBAR
-                toolbarView
-                
-                // CONTENT with optional blur background
-                ZStack {
-                    // Blurred image background (current folder or inherited from ancestor)
-                    // Use subtle blur for empty state, normal blur for content
-                    if let imageData = inheritedImageData {
-                        if liveFolder.subfolders.isEmpty {
-                            BlurredImageBackground(imageData: imageData, blurRadius: 25, overlayOpacity: 0.3)
-                        } else {
-                            BlurredImageBackground(imageData: imageData)
-                        }
-                    } else {
-                        // Default gradient background (inherited until an element has its own image)
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.blue.opacity(0.15),
-                                Color.blue.opacity(0.05),
-                                Color(.systemBackground).opacity(0.0)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .ignoresSafeArea()
-                    }
-                    
-                    // Actual content
-                    if sortedSubfolders.isEmpty {
-                        emptyState
-                    } else {
-                        mainContentView
-                    }
-                }
-            }
-            
-            // BOTTOM BAR - Hide when showing onboarding (root with no elements)
-            if !(folderPath.isEmpty && liveFolder.subfolders.isEmpty) {
-                if isSelectionMode {
-                    selectionActionBar
-                } else {
-                    bottomBarView
-                }
-            }
-            
-            // Search Results Overlay
-            if isSearching && !searchText.isEmpty {
-                searchResultsView
-            }
-        }
-        .navigationDestination(for: FolderDestination.self) { destination in
-            if let folder = viewModel.getFolderFromPath(destination.path) {
-                FolderDetailView(
-                    folder: folder,
-                    folderPath: destination.path,
-                    viewModel: viewModel,
-                    highlightedItemId: navigationHighlightedItemId,
-                    navigationPath: $navigationPath
-                )
-            }
-        }
-        .navigationDestination(isPresented: $showingInfo) {
-            WelcomeOnboardingView(mode: .info, onDismiss: {
-                showingInfo = false
-            })
-        }
-        .navigationTitle(liveFolder.name)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text(liveFolder.name)
-                        .font(.headline)
-                        .foregroundColor(isInHiddenContext ? .orange : .primary)
-                }
-            }
-            
-            ToolbarItem(placement: .navigationBarLeading) {
-                if isSelectionMode {
-                    Button("Listo") {
-                        HapticManager.lightImpact()
-                        isSelectionMode = false
-                        selectedItemIds.removeAll()
-                    }
-                } else {
-                    Button(action: {
-                        // Show alert if no elements exist at root
-                        if folderPath.isEmpty && liveFolder.subfolders.isEmpty {
-                            showFirstElementAlert = true
-                        } else {
-                            withAnimation(.spring()) {
-                                isSearching = true
-                                isSearchFocused = true
-                            }
-                        }
-                    }) {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.blue)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                }
-            }
-            
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 12) {
-                    if folderPath.isEmpty {
-                        if !isSelectionMode {
-                            // Show alert if no elements, otherwise show menu
-                            if liveFolder.subfolders.isEmpty {
-                                Menu {
-                                    Button(action: {
-                                        showingInfo = true
-                                    }) {
-                                        Label("Info", systemImage: "info.circle")
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .foregroundColor(.blue)
-                                }
-                            } else {
-                                Menu {
-                                    if !sortedSubfolders.isEmpty {
-                                        Button(action: {
-                                            withAnimation {
-                                                isSelectionMode = true
-                                            }
-                                        }) {
-                                            Label("Seleccionar", systemImage: "checkmark.circle")
-                                        }
-                                    }
-                                    
-                                    if !isInHiddenContext {
-                                        Button(action: {
-                                            withAnimation {
-                                                showingHiddenElements.toggle()
-                                                viewModel.setShowingHiddenElements(showingHiddenElements, for: folderPath)
-                                            }
-                                        }) {
-                                            if showingHiddenElements {
-                                                Label("Volver a Elementos", systemImage: "atom")
-                                            } else {
-                                                Label("Elementos Ocultos", systemImage: "eye.slash")
-                                            }
-                                        }
-                                    }
-                                    
-                                    Divider()
-                                    
-                                    Button(action: {
-                                        showingInfo = true
-                                    }) {
-                                        Label("Info", systemImage: "info.circle")
-                                    }
-                                } label: {
-                                    Image(systemName: "ellipsis")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        } else {
-                            let allSelected = !sortedSubfolders.isEmpty && selectedItemIds.count == sortedSubfolders.count
-                            Button(action: {
-                                HapticManager.selection()
-                                if allSelected {
-                                    selectedItemIds.removeAll()
-                                } else {
-                                    let allIds = sortedSubfolders.map { $0.id }
-                                    selectedItemIds = Set(allIds)
-                                }
-                            }) {
-                                Label(
-                                    allSelected ? "Deseleccionar Todo" : "Seleccionar Todo",
-                                    systemImage: allSelected ? "checkmark.circle.badge.xmark.fill" : "checkmark.circle.badge.plus"
-                                )
-                            }
-                            .tint(.blue)
-                        }
-                    } else {
-                        // Subfolder Logic
-                        if !isSelectionMode {
-                            Button(action: { HapticManager.lightImpact(); viewModel.toggleFolderFavorite(folder: liveFolder, path: folderPath) }) {
-                                Image(systemName: viewModel.isFolderFavorite(folderId: liveFolder.id) ? "star.fill" : "star")
-                                    .foregroundColor(.yellow)
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .contentShape(Rectangle())
-                            }
-                            
-                            Menu {
-                                // Editar el elemento padre
-                                Button(action: {
-                                    HapticManager.lightImpact()
-                                    editingElement = EditingInfo(folder: liveFolder, path: folderPath)
-                                }) {
-                                    Label("Editar", systemImage: "pencil")
-                                }
-                                
-                                if !sortedSubfolders.isEmpty {
-                                    Button(action: {
-                                        withAnimation {
-                                            isSelectionMode = true
-                                        }
-                                    }) {
-                                        Label("Seleccionar", systemImage: "checkmark.circle")
-                                    }
-                                }
-                                
-                                if !isInHiddenContext {
-                                    Button(action: {
-                                        withAnimation {
-                                            showingHiddenElements.toggle()
-                                            viewModel.setShowingHiddenElements(showingHiddenElements, for: folderPath)
-                                        }
-                                    }) {
-                                        if showingHiddenElements {
-                                            Label("Volver a Elementos", systemImage: "atom")
-                                        } else {
-                                            Label("Elementos Ocultos", systemImage: "eye.slash")
-                                        }
-                                    }
-                                }
-                                
-                                Divider()
-                                
-                                Button(action: {
-                                    showingInfo = true
-                                }) {
-                                    Label("Info", systemImage: "info.circle")
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .foregroundColor(.blue)
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .contentShape(Rectangle())
-                            }
-                        } else {
-                             // Selection Mode in Subfolder -> Show Select All / Deselect All
-                             let allSelected = !sortedSubfolders.isEmpty && selectedItemIds.count == sortedSubfolders.count
-                             Button(action: {
-                                 HapticManager.selection()
-                                 if allSelected {
-                                     selectedItemIds.removeAll()
-                                 } else {
-                                     let allIds = sortedSubfolders.map { $0.id }
-                                     selectedItemIds = Set(allIds)
-                                 }
-                             }) {
-                                 Label(
-                                     allSelected ? "Deseleccionar Todo" : "Seleccionar Todo",
-                                     systemImage: allSelected ? "checkmark.circle.badge.xmark.fill" : "checkmark.circle.badge.plus"
-                                 )
-                             }
-                             .tint(.blue)
-                        }
-                    }
-                }
-            }
-        }
-        .sheet(isPresented: $showingNewFolderSheet) {
-            NewFolderSheet(
-                viewModel: viewModel,
-                folderPath: folderPath.isEmpty ? nil : folderPath,
-                isPresented: $showingNewFolderSheet,
-                batchMode: isBatchAddMode
-            )
-            .id(isBatchAddMode)
-        }
-        .sheet(isPresented: $showingFolderResult) {
-            if let folderResult = selectedFolderResult {
-                ResultSheet(
-                    folder: folderResult.folder,
-                    path: folderResult.path,
-                    isPresented: $showingFolderResult,
-                    viewModel: viewModel,
-                    navigateToFullPath: navigateToFullPath,
-                    highlightedItemId: $navigationHighlightedItemId
-                )
-            }
-        }
-        .sheet(isPresented: $showingFavorites) {
-            FavoritesSheet(
-                viewModel: viewModel,
-                isPresented: $showingFavorites,
-                navigateToFullPath: navigateToFullPath,
-                highlightedItemId: $navigationHighlightedItemId,
-                currentPath: .constant(folderPath)
-            )
-        }
-        .sheet(isPresented: $showingHistory) {
-            HistorySheet(
-                viewModel: viewModel,
-                isPresented: $showingHistory,
-                navigateToFullPath: navigateToFullPath,
-                highlightedItemId: $navigationHighlightedItemId
-            )
-        }
-        .sheet(isPresented: $showingHiddenFolders) {
-            HiddenFoldersSheet(
-                viewModel: viewModel,
-                isPresented: $showingHiddenFolders,
-                navigateToFullPath: navigateToFullPath,
-                highlightedItemId: $navigationHighlightedItemId
-            )
-        }
-        .sheet(item: $editingElement) { element in
-            EditElementSheet(
-                viewModel: viewModel,
-                isPresented: Binding(
-                    get: { editingElement != nil },
-                    set: { if !$0 { editingElement = nil } }
-                ),
-                folder: element.folder,
-                folderPath: element.path,
-                moveCopyOperation: $moveCopyOperation
-            )
-        }
-        // Camera - fullscreen cover
-        .fullScreenCover(item: Binding(
-            get: { imagePickerRequest?.isFullScreen == true ? imagePickerRequest : nil },
-            set: { imagePickerRequest = $0 }
-        )) { request in
-            ImagePickerView(onImagePicked: { image in
-                let resizedImage = image.resized(toMaxDimension: 1024)
-                if let data = resizedImage.jpegData(compressionQuality: 0.8) {
-                    viewModel.updateFolderImage(imageData: data, at: folderPath)
-                }
-            }, sourceType: request.sourceType)
-            .ignoresSafeArea()
-        }
-        // Photo Library - sheet
-        .sheet(item: Binding(
-            get: { imagePickerRequest?.isFullScreen == false ? imagePickerRequest : nil },
-            set: { imagePickerRequest = $0 }
-        )) { request in
-            ImagePickerView(onImagePicked: { image in
-                let resizedImage = image.resized(toMaxDimension: 1024)
-                if let data = resizedImage.jpegData(compressionQuality: 0.8) {
-                    viewModel.updateFolderImage(imageData: data, at: folderPath)
-                }
-            }, sourceType: request.sourceType)
-        }
-        .sheet(item: $moveCopyOperation) { operation in
-            MoveCopySheet(
-                viewModel: viewModel,
-                isPresented: Binding(
-                    get: { moveCopyOperation != nil },
-                    set: { if !$0 { moveCopyOperation = nil } }
-                ),
-                foldersToMove: operation.items,
-                sourceContainerPath: operation.sourceContainerPath,
-                isCopy: operation.isCopy,
-                onSuccess: {
-                    isSelectionMode = false
-                    selectedItemIds.removeAll()
-                }
-            )
-        }
-        .confirmationDialog("¿Estás seguro?", isPresented: $showingMultiDeleteConfirmation, titleVisibility: .visible) {
-            Button("Eliminar \(selectedItemIds.count) elementos", role: .destructive) {
-                if folderPath.isEmpty {
-                    viewModel.batchDeleteRootFolders(ids: selectedItemIds)
-                } else {
-                    viewModel.batchDeleteSubfolders(ids: selectedItemIds, from: folderPath)
-                }
-                isSelectionMode = false
-                selectedItemIds.removeAll()
-            }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Esta acción no se puede deshacer.")
-        }
-        .modifier(AlertsModifier(
-            showFirstElementAlert: $showFirstElementAlert,
-            showingEmptyRandomizeAlert: $showingEmptyRandomizeAlert,
-            showingHiddenAncestorAlert: $showingHiddenAncestorAlert,
-            hiddenAncestorAlertName: hiddenAncestorAlertName,
-            showingHiddenRandomizeAlert: $showingHiddenRandomizeAlert,
-            showHiddenFavoriteAlert: $viewModel.showHiddenFavoriteAlert
-        ))
-        .onAppear {
-            currentViewType = viewModel.getViewType(for: folderPath.isEmpty ? nil : liveFolder.id)
-            currentSortType = viewModel.getSortType(for: folderPath.isEmpty ? nil : liveFolder.id)
-            showingHiddenElements = viewModel.getShowingHiddenElements(for: folderPath)
-            // Forzar re-render para que los gestos se registren correctamente
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                toolbarReady = true
-            }
+            contentStack
+            overlayStack
         }
     }
-    
-    // MARK: - Subviews
-    
-    @ViewBuilder
-    private var toolbarView: some View {
-        // Check if we're in onboarding state (root with no elements)
-        let isOnboarding = folderPath.isEmpty && liveFolder.subfolders.isEmpty
-        
-        HStack(spacing: 25) {
-            // Sort Menu - show alert if onboarding
-            if isOnboarding {
-                Button(action: { showFirstElementAlert = true }) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 18))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
-                }
-            } else {
-                SortMenuView(sortType: $currentSortType)
-                    .foregroundColor(.blue)
-                    .font(.system(size: 18))
-                    .onChange(of: currentSortType) { viewModel.setSortType($0, for: folderPath.isEmpty ? nil : liveFolder.id) }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .contentShape(Rectangle())
-            }
-            
-            // View Menu - show alert if onboarding
-            if isOnboarding {
-                Button(action: { showFirstElementAlert = true }) {
-                    Image(systemName: "rectangle.grid.1x2")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 18))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
-                }
-            } else {
-                Menu {
-                    Picker("Vista", selection: $currentViewType) {
-                        Text("Lista").tag(RandomitasViewModel.ViewType.list)
-                        Text("Cuadrícula").tag(RandomitasViewModel.ViewType.grid)
-                        Text("Galería").tag(RandomitasViewModel.ViewType.gallery)
-                    }
-                    .onChange(of: currentViewType) { newValue in
-                        viewModel.setViewType(newValue, for: folderPath.isEmpty ? nil : liveFolder.id)
-                    }
-                } label: {
-                    Image(systemName: "rectangle.grid.1x2")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 18))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
-                }
-            }
-            
-            // History - show alert if onboarding
-            Button(action: {
-                if isOnboarding {
-                    showFirstElementAlert = true
-                } else {
-                    HapticManager.lightImpact()
-                    showingHistory = true
-                }
-            }) {
-                Image(systemName: "clock")
-                    .foregroundColor(.blue)
-                    .font(.system(size: 18))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-                    .contentShape(Rectangle())
-            }
-            
-            if !showingHiddenElements && !isSelectionMode {
-                Button {
-                    // Solo abrir en modo normal si NO fue un long press
-                    if !longPressDetected {
-                        HapticManager.lightImpact()
-                        isBatchAddMode = false
-                        showingNewFolderSheet = true
-                    }
-                    longPressDetected = false
-                    isPressedPlusButton = false
-                } label: {
-                    Image(systemName: "plus")
-                        .foregroundColor(.blue)
-                        .font(.system(size: 20))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .contentShape(Rectangle())
-                        .scaleEffect(isPressedPlusButton ? 0.85 : 1.0)
-                        .animation(.easeInOut(duration: 0.15), value: isPressedPlusButton)
-                }
-                .accessibilityIdentifier("addElementButton")
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { _ in
-                            if !isPressedPlusButton {
-                                isPressedPlusButton = true
-                            }
-                        }
-                        .onEnded { _ in
-                            isPressedPlusButton = false
-                        }
-                )
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.4)
-                        .onEnded { _ in
-                            longPressDetected = true
-                            isPressedPlusButton = false
-                            isBatchAddMode = true
-                            HapticManager.mediumImpact()
-                            showingNewFolderSheet = true
-                        }
-                )
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.systemBackground))
-        .shadow(color: Color.black.opacity(0.2), radius: 8, x: 0, y: 4)
-        .zIndex(1)
-        .id(toolbarReady) // Fuerza re-render para que los gestos se registren
-    }
 
-
-    private var mainContentView: some View {
-        // Shared Views are now Generic
-        switch currentViewType {
-        case .list:
-            AnyView(FolderDetailListView(
-                viewModel: viewModel,
-                folderPath: folderPath,
-                sortedSubfolders: sortedSubfolders,
-                sortType: currentSortType,
-                isInHiddenContext: isInHiddenContext,
-                showingHiddenAncestorAlert: $showingHiddenAncestorAlert,
-                hiddenAncestorAlertName: $hiddenAncestorAlertName,
-                editingElement: $editingElement,
-
-                imagePickerRequest: $imagePickerRequest,
-                moveCopyOperation: $moveCopyOperation,
-                isSelectionMode: $isSelectionMode,
-                navigationPath: $navigationPath,
-                selectedItemIds: $selectedItemIds,
-                onOpenSearch: {
-                    withAnimation {
-                        isSearching = true
-                        isSearchFocused = true
-                    }
-                },
-                highlightedItemId: highlightedItemId
-            ))
-        case .grid:
-            AnyView(FolderDetailGridView(
-                viewModel: viewModel,
-                folderPath: folderPath,
-                sortedSubfolders: sortedSubfolders,
-                sortType: currentSortType,
-                isInHiddenContext: isInHiddenContext,
-                showingHiddenAncestorAlert: $showingHiddenAncestorAlert,
-                hiddenAncestorAlertName: $hiddenAncestorAlertName,
-                editingElement: $editingElement,
-
-                imagePickerRequest: $imagePickerRequest,
-                moveCopyOperation: $moveCopyOperation,
-                isSelectionMode: $isSelectionMode,
-                navigationPath: $navigationPath,
-                selectedItemIds: $selectedItemIds,
-                onOpenSearch: {
-                    withAnimation {
-                        isSearching = true
-                        isSearchFocused = true
-                    }
-                },
-                highlightedItemId: highlightedItemId
-            ))
-        case .gallery:
-            AnyView(FolderDetailGalleryView(
-                viewModel: viewModel,
-                folderPath: folderPath,
-                sortedSubfolders: sortedSubfolders,
-                sortType: currentSortType,
-                isInHiddenContext: isInHiddenContext,
-                showingHiddenAncestorAlert: $showingHiddenAncestorAlert,
-                hiddenAncestorAlertName: $hiddenAncestorAlertName,
-                editingElement: $editingElement,
-
-                imagePickerRequest: $imagePickerRequest,
-                moveCopyOperation: $moveCopyOperation,
-                isSelectionMode: $isSelectionMode,
-                navigationPath: $navigationPath,
-                selectedItemIds: $selectedItemIds,
-                onOpenSearch: {
-                    withAnimation {
-                        isSearching = true
-                        isSearchFocused = true
-                    }
-                },
-                highlightedItemId: highlightedItemId
-            ))
-        }
-    }
-    
-    @ViewBuilder
-    private var selectionActionBar: some View {
-        if isSelectionMode {
-            VStack(spacing: 0) {
-                Spacer()
-                
-                // Selection count indicator
-                if !selectedItemIds.isEmpty {
-                    Text("\(selectedItemIds.count) seleccionado\(selectedItemIds.count > 1 ? "s" : "")")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.secondary)
-                        .padding(.bottom, 8)
-                }
-                
-                HStack(spacing: 12) {
-                    // Move
-                    Button(action: {
-                        HapticManager.mediumImpact()
-                        let selectedFolders = sortedSubfolders.filter { selectedItemIds.contains($0.id) }
-                        guard !selectedFolders.isEmpty else { return }
-                        moveCopyOperation = MoveCopyOperation(items: selectedFolders, sourceContainerPath: folderPath, isCopy: false)
-                    }) {
-                        VStack(spacing: 6) {
-                            Image(systemName: "arrow.turn.up.right")
-                                .font(.system(size: 22, weight: .medium))
-                            Text("Mover")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .background(selectedItemIds.isEmpty ? Color(.systemGray5) : Color.blue.opacity(0.12))
-                        .foregroundColor(selectedItemIds.isEmpty ? .gray : .blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .disabled(selectedItemIds.isEmpty)
-                    
-                    // Copy
-                    Button(action: {
-                        HapticManager.mediumImpact()
-                        let selectedFolders = sortedSubfolders.filter { selectedItemIds.contains($0.id) }
-                        guard !selectedFolders.isEmpty else { return }
-                        moveCopyOperation = MoveCopyOperation(items: selectedFolders, sourceContainerPath: folderPath, isCopy: true)
-                    }) {
-                        VStack(spacing: 6) {
-                            Image(systemName: "doc.on.doc")
-                                .font(.system(size: 22, weight: .medium))
-                            Text("Copiar")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .background(selectedItemIds.isEmpty ? Color(.systemGray5) : Color.blue.opacity(0.12))
-                        .foregroundColor(selectedItemIds.isEmpty ? .gray : .blue)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .disabled(selectedItemIds.isEmpty)
-                    
-                    // Hide / Show
-                    Button(action: {
-                        HapticManager.mediumImpact()
-                        guard !selectedItemIds.isEmpty else { return }
-                        
-                        if isInHiddenContext {
-                            // Inside hidden context - show popup about ancestor
-                            if let ancestorName = viewModel.getHiddenAncestorName(at: folderPath) ?? (liveFolder.isHidden ? liveFolder.name : nil) {
-                                hiddenAncestorAlertName = ancestorName
-                                showingHiddenAncestorAlert = true
-                            }
-                            return
-                        }
-                        
-                        if folderPath.isEmpty {
-                             viewModel.batchToggleHiddenRoot(ids: selectedItemIds)
-                        } else {
-                             viewModel.batchToggleHiddenSubfolders(ids: selectedItemIds, at: folderPath)
-                        }
-                        
-                        isSelectionMode = false
-                        selectedItemIds.removeAll()
-                    }) {
-                        VStack(spacing: 6) {
-                            Image(systemName: (showingHiddenElements || isInHiddenContext) ? "eye" : "eye.slash")
-                                .font(.system(size: 22, weight: .medium))
-                            Text((showingHiddenElements || isInHiddenContext) ? "Mostrar" : "Ocultar")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .background(selectedItemIds.isEmpty ? Color(.systemGray5) : Color.orange.opacity(0.12))
-                        .foregroundColor(selectedItemIds.isEmpty ? .gray : .orange)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .disabled(selectedItemIds.isEmpty)
-                    
-                    // Delete
-                    Button(action: {
-                        HapticManager.warning()
-                        showingMultiDeleteConfirmation = true
-                    }) {
-                        VStack(spacing: 6) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 22, weight: .medium))
-                            Text("Eliminar")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 60)
-                        .background(selectedItemIds.isEmpty ? Color(.systemGray5) : Color.red.opacity(0.12))
-                        .foregroundColor(selectedItemIds.isEmpty ? .gray : .red)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                    }
-                    .disabled(selectedItemIds.isEmpty)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 16)
-                .background(.ultraThinMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
-                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: -1)
-            }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-            .zIndex(2)
-        }
-    }
-    
-    @ViewBuilder
-    private var bottomBarView: some View {
-        VStack {
-            Spacer()
-                
-                if isSearching {
-                    // SEARCH BAR MODE
-                HStack {
-                        HStack {
-                            Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                            TextField("Buscar Elementos...", text: $searchText)
-                            .focused($isSearchFocused)
-                            .submitLabel(.search)
-                            .onSubmit {
-                                // Optional: Action on submit
-                            }
-                            
-                            if !searchText.isEmpty {
-                                Button(action: { searchText = "" }) {
-                                    Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.gray)
-                                }
-                            }
-                        }
-                        .padding(12)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(10)
-                        
-                        Button("Cancelar") {
-                            withAnimation(.spring()) {
-                                isSearching = false
-                                searchText = ""
-                                isSearchFocused = false
-                            }
-                        }
-                        .foregroundColor(.blue)
-                    }
-                    .padding()
-                    .background(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: -2)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                } else {
-                    // NORMAL MODE
-                    ZStack {
-                        // Static shadow layer - always present, no animation
-                        HStack {
-                            // Shadow placeholder for Hidden button
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 56, height: 56)
-                                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                                .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
-                            
-                            Spacer()
-                            
-                            // Shadow placeholder for Shuffle button
-                            Capsule()
-                                .fill(Color.clear)
-                                .frame(width: 110, height: 56)
-                                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                                .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
-                            
-                            Spacer()
-                            
-                            // Shadow placeholder for Favorites button
-                            Circle()
-                                .fill(Color.clear)
-                                .frame(width: 56, height: 56)
-                                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                                .shadow(color: .black.opacity(0.08), radius: 2, x: 0, y: 1)
-                        }
-                        .padding(.horizontal, 16)
-                        .allowsHitTesting(false)
-                        
-                        // Animated buttons layer
-                        HStack {
-                            // Hidden Folders Button
-                            Button(action: { HapticManager.lightImpact(); showingHiddenFolders = true }) {
-                                Image(systemName: "eye.slash")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.orange)
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(Circle())
-                                    .glassEffect(.clear)
-                            }
-                            .contentShape(Circle())
-                            
-                            Spacer()
-                            
-                            // Shuffle Button (Center)
-                            if isInHiddenContext {
-                                Button(action: {
-                                    HapticManager.warning()
-                                    showingHiddenRandomizeAlert = true
-                                }) {
-                                    Image("ShuffleIcon")
-                                        .renderingMode(.template)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 45, height: 45)
-                                        .foregroundStyle(Color.accentColor)
-                                        .frame(width: 95, height: 56)
-                                        .clipShape(Capsule())
-                                        .glassEffect(.clear)
-                                        
-                                }
-                                .contentShape(Capsule())
-                            } else {
-                                Button(action: randomizeCurrentScreen) {
-                                    Image("ShuffleIcon")
-                                        .renderingMode(.template)
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fit)
-                                        .frame(width: 45, height: 45)
-                                        .foregroundStyle(Color.accentColor)
-                                        .frame(width: 95, height: 56)
-                                        .clipShape(Capsule())
-                                        .glassEffect(.clear)
-                                }
-                                .contentShape(Capsule())
-                            }
-                            
-                            Spacer()
-                            
-                            // Favorites Button
-                            Button(action: { HapticManager.lightImpact(); showingFavorites = true }) {
-                                Image(systemName: "star")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.yellow)
-                                    .frame(width: 56, height: 56)
-                                    .clipShape(Circle())
-                                    .glassEffect(.clear)
-                            }
-                            .contentShape(Circle())
-                        }
-                        .padding(.horizontal, 16)
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                    .padding(.bottom, 0)
-                    .padding(.top, 20)
-                    .background(
-                        LinearGradient(
-                            gradient: Gradient(stops: [
-                                .init(color: .clear, location: 0.0),
-                                .init(color: .black.opacity(0.05), location: 0.3),
-                                .init(color: .black.opacity(0.15), location: 0.6),
-                                .init(color: .black.opacity(0.35), location: 1.0)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .padding(.top, -40)
-                        .padding(.bottom, -100)
-                        .allowsHitTesting(false)
-                    )
-                }
-        }
-    }
-    
-    @ViewBuilder
-    private var searchResultsView: some View {
+    private var contentStack: some View {
         VStack(spacing: 0) {
-            // Header background
-            Color(.systemBackground)
-                .frame(height: 1)
-                .ignoresSafeArea()
-            
-            List {
-                let results = viewModel.search(query: searchText)
-                    .sorted { viewModel.sortName(for: $0.0.name).localizedStandardCompare(viewModel.sortName(for: $1.0.name)) == .orderedAscending }
-                if !results.isEmpty {
-                    let grouped = groupSearchResults(results)
-                    ForEach(grouped, id: \.letter) { group in
-                        Section {
-                            ForEach(group.items, id: \.0.id) { folder, path, parentName in
-                                Button(action: {
-                                    navigationHighlightedItemId = folder.id
-                                    navigateToFullPath(path)
-                                    isSearching = false
-                                    searchText = ""
-                                    isSearchFocused = false
-                                }) {
-                                    HStack {
-                                        VStack(alignment: .leading) {
-                                            Text(folder.name)
-                                                .foregroundColor(.primary)
-                                            HStack(spacing: 4) {
-                                                Text("< \(parentName)")
-                                                    .font(.caption)
-                                            }
-                                            .foregroundColor(.gray)
-                                        }
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
-                                            .foregroundColor(.gray)
-                                    }
-                                }
-                            }
-                        } header: {
-                            Text(group.letter)
-                                .font(.title3.bold())
-                                .foregroundColor(.secondary)
-                                .textCase(nil)
-                        }
-                    }
-                } else {
-                    Text("No se encontraron Elementos")
-                    .foregroundColor(.gray)
-                }
+            FolderDetailToolbarView(
+                viewModel: viewModel,
+                uiState: uiState,
+                folderPath: folderPath,
+                liveFolder: liveFolder
+            )
+            ZStack {
+                contentBackground
+                contentBody
             }
-            .listStyle(.plain)
-            .background(Color(.systemBackground))
         }
-        .background(Color(.systemBackground))
-        .padding(.bottom, 80)
-        .zIndex(1)
-        .transition(.opacity)
     }
-    
-    private func groupSearchResults(_ results: [(Folder, [Int], String)]) -> [(letter: String, items: [(Folder, [Int], String)])] {
-        var groups: [(String, [(Folder, [Int], String)])] = []
-        var currentLetter = ""
-        var currentGroup: [(Folder, [Int], String)] = []
-        
-        for item in results {
-            let letter = viewModel.sectionLetter(for: item.0)
-            if letter != currentLetter {
-                if !currentGroup.isEmpty {
-                    groups.append((currentLetter, currentGroup))
+
+    private var contentBackground: some View {
+        Group {
+            if let imageData = inheritedImageData {
+                if liveFolder.subfolders.isEmpty {
+                    BlurredImageBackground(imageData: imageData, blurRadius: 25, overlayOpacity: 0.3)
+                } else {
+                    BlurredImageBackground(imageData: imageData)
                 }
-                currentLetter = letter
-                currentGroup = [item]
             } else {
-                currentGroup.append(item)
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color.blue.opacity(0.15),
+                        Color.blue.opacity(0.05),
+                        Color(.systemBackground).opacity(0.0)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
             }
         }
-        if !currentGroup.isEmpty {
-            groups.append((currentLetter, currentGroup))
-        }
-        return groups
     }
-    
-    @ViewBuilder
-    private var emptyState: some View {
-        // Show onboarding only for root level when truly empty (no elements at all)
-        if folderPath.isEmpty && !showingHiddenElements && liveFolder.subfolders.isEmpty {
-            WelcomeOnboardingView(mode: .onboarding, onCreateFirstElement: {
-                HapticManager.lightImpact()
-                isBatchAddMode = false
-                showingNewFolderSheet = true
-            })
-        } else if folderPath.isEmpty && !showingHiddenElements && !liveFolder.subfolders.isEmpty {
-            // All elements at root are hidden
-            VStack(spacing: 20) {
-                Spacer()
-                
-                Image(systemName: "eye.slash")
-                    .font(.system(size: 60))
-                    .foregroundColor(.orange)
-                
-                VStack(spacing: 8) {
-                    Text("Todos los elementos están ocultos")
-                        .font(.headline)
-                    Text("Accede a los elementos ocultos desde el menú ⋯")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                
-                Spacer()
+
+    private var contentBody: some View {
+        Group {
+            if sortedSubfolders.isEmpty {
+                FolderDetailEmptyStateView(
+                    uiState: uiState,
+                    folderPath: folderPath,
+                    liveFolder: liveFolder,
+                    isInHiddenContext: isInHiddenContext
+                )
+            } else {
+                FolderDetailContentView(
+                    viewModel: viewModel,
+                    folderPath: folderPath,
+                    sortedSubfolders: sortedSubfolders,
+                    sortType: uiState.currentSortType,
+                    viewType: uiState.currentViewType,
+                    isInHiddenContext: isInHiddenContext,
+                    showingHiddenAncestorAlert: $uiState.showingHiddenAncestorAlert,
+                    hiddenAncestorAlertName: $uiState.hiddenAncestorAlertName,
+                    showHiddenFavoriteAlert: $uiState.showHiddenFavoriteAlert,
+                    editingElement: $uiState.editingElement,
+                    imagePickerRequest: $uiState.imagePickerRequest,
+                    moveCopyOperation: $uiState.moveCopyOperation,
+                    isSelectionMode: $uiState.isSelectionMode,
+                    selectedItemIds: $uiState.selectedItemIds,
+                    navigationPath: $navigationPath,
+                    onOpenSearch: {
+                        withAnimation {
+                            uiState.isSearching = true
+                            isSearchFocused = true
+                        }
+                    },
+                    highlightedItemId: highlightedItemId
+                )
             }
-        } else {
-            // Standard empty state for subfolders or hidden elements view
-            VStack(spacing: 20) {
-                Spacer()
-                
-                if isInHiddenContext && !showingHiddenElements {
-                    // Hidden context empty state - can create but items won't randomize
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 60))
-                        .foregroundColor(.orange)
-                    
-                    VStack(spacing: 8) {
-                        Text("Elemento Oculto")
-                            .font(.headline)
-                        Text("Los elementos creados aquí no aparecerán al randomizar")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 40)
-                    }
-                    
-                    // Normal "+" button to create elements
-                    Button {
-                        if !longPressDetected {
-                            HapticManager.lightImpact()
-                            isBatchAddMode = false
-                            showingNewFolderSheet = true
-                        }
-                        longPressDetected = false
-                        isPressedPlusButton = false
-                    } label: {
-                        VStack {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.primary)
-                        }
-                        .frame(width: 100, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .glassEffect(.clear)
-                        .scaleEffect(isPressedPlusButton ? 0.9 : 1.0)
-                        .animation(.easeInOut(duration: 0.15), value: isPressedPlusButton)
-                    }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in
-                                if !isPressedPlusButton {
-                                    isPressedPlusButton = true
-                                }
-                            }
-                            .onEnded { _ in
-                                isPressedPlusButton = false
-                            }
+        }
+    }
+
+    private var overlayStack: some View {
+        Group {
+            if !(folderPath.isEmpty && liveFolder.subfolders.isEmpty) {
+                if uiState.isSelectionMode {
+                    FolderDetailSelectionBarView(
+                        viewModel: viewModel,
+                        uiState: uiState,
+                        sortedSubfolders: sortedSubfolders,
+                        folderPath: folderPath,
+                        isInHiddenContext: isInHiddenContext,
+                        liveFolder: liveFolder
                     )
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.4)
-                            .onEnded { _ in
-                                longPressDetected = true
-                                isPressedPlusButton = false
-                                isBatchAddMode = true
-                                HapticManager.mediumImpact()
-                                showingNewFolderSheet = true
-                            }
-                    )
-                } else if showingHiddenElements {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 60))
-                        .foregroundColor(.orange)
-                    
-                    VStack(spacing: 8) {
-                        Text("Sin Elementos Ocultos")
-                            .font(.headline)
-                        Text("Los elementos ocultos aparecerán aquí")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                    }
                 } else {
-                    Image(systemName: "atom")
-                        .font(.system(size: 60))
-                        .foregroundColor(.blue)
-                    
-                    VStack(spacing: 8) {
-                        Text("Sin Elementos guardados")
-                            .font(.headline)
-                        Text("Crea uno nuevo")
-                            .font(.subheadline)
-                    }
-                    
-                    // Button for subfolder empty state
-                    Button {
-                        if !longPressDetected {
-                            HapticManager.lightImpact()
-                            isBatchAddMode = false
-                            showingNewFolderSheet = true
-                        }
-                        longPressDetected = false
-                        isPressedPlusButton = false
-                    } label: {
-                        VStack {
-                            Image(systemName: "plus")
-                                .font(.title2)
-                                .foregroundColor(.primary)
-                        }
-                        .frame(width: 100, height: 80)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .glassEffect(.clear)
-                        .scaleEffect(isPressedPlusButton ? 0.9 : 1.0)
-                        .animation(.easeInOut(duration: 0.15), value: isPressedPlusButton)
-                    }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in
-                                if !isPressedPlusButton {
-                                    isPressedPlusButton = true
-                                }
-                            }
-                            .onEnded { _ in
-                                isPressedPlusButton = false
-                            }
-                    )
-                    .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.4)
-                            .onEnded { _ in
-                                longPressDetected = true
-                                isPressedPlusButton = false
-                                isBatchAddMode = true
-                                HapticManager.mediumImpact()
-                                showingNewFolderSheet = true
-                            }
+                    FolderDetailBottomBarView(
+                        uiState: uiState,
+                        isInHiddenContext: isInHiddenContext,
+                        randomizeAction: randomizeCurrentScreen,
+                        isSearchFocused: $isSearchFocused
                     )
                 }
-                
-                Spacer()
+            }
+            if uiState.isSearching && !uiState.searchText.isEmpty {
+                FolderDetailSearchResultsView(
+                    viewModel: viewModel,
+                    uiState: uiState,
+                    navigateToFullPath: navigateToFullPath,
+                    isSearchFocused: $isSearchFocused
+                )
             }
         }
     }
@@ -1251,11 +404,11 @@ struct FolderDetailView: View {
         HapticManager.mediumImpact()
         viewModel.cleanOldHistory()
         if let folderResult = viewModel.randomizeCurrentScreen(at: folderPath) {
-            selectedFolderResult = folderResult
-            showingFolderResult = true
+            uiState.selectedFolderResult = folderResult
+            uiState.showingFolderResult = true
         } else {
             HapticManager.warning()
-            showingEmptyRandomizeAlert = true
+            uiState.showingEmptyRandomizeAlert = true
         }
     }
     
@@ -1272,11 +425,6 @@ struct FolderDetailView: View {
             navigationPath.append(FolderDestination(path: partialPath))
         }
     }
-}
-
-class FolderWrapper: ObservableObject {
-    @Published var folder: Folder
-    init(_ folder: Folder) { self.folder = folder }
 }
 
 // MARK: - Alerts ViewModifier (extracted to reduce body complexity)

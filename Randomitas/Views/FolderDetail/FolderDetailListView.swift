@@ -16,14 +16,12 @@ struct FolderDetailListView: View {
     let isInHiddenContext: Bool
     @Binding var showingHiddenAncestorAlert: Bool
     @Binding var hiddenAncestorAlertName: String
+    @Binding var showHiddenFavoriteAlert: Bool
     
     
     @Binding var editingElement: EditingInfo?
     
-    // Undo delete system
-    @State private var pendingDeleteFolder: Folder?
-    @State private var pendingDeleteTimer: Timer?
-    @State private var showUndoToast: Bool = false
+    // Delete policy: immediate delete (consistent across views)
     
     @Binding var imagePickerRequest: ImagePickerRequest?
     @Binding var moveCopyOperation: MoveCopyOperation?
@@ -37,12 +35,8 @@ struct FolderDetailListView: View {
     
     @Environment(\.dismiss) var dismiss
     
-    /// Subfolders filtered to exclude the pending-delete element
     private var visibleSubfolders: [Folder] {
-        if let pending = pendingDeleteFolder {
-            return sortedSubfolders.filter { $0.id != pending.id }
-        }
-        return sortedSubfolders
+        sortedSubfolders
     }
     
     /// Whether to show alphabetical section headers
@@ -101,7 +95,7 @@ struct FolderDetailListView: View {
                         }
                     }
                     
-                    if visibleSubfolders.isEmpty && pendingDeleteFolder == nil {
+                    if visibleSubfolders.isEmpty {
                         Text("Vacío").foregroundColor(.gray)
                     }
                 }
@@ -120,81 +114,16 @@ struct FolderDetailListView: View {
                 }
             }
             
-            // Undo toast
-            if showUndoToast, let folder = pendingDeleteFolder {
-                HStack {
-                    Image(systemName: "trash")
-                        .foregroundColor(.primary)
-                    Text("\"\(folder.name)\" eliminado")
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    Spacer()
-                    Button("Deshacer") {
-                        undoDelete()
-                    }
-                    .fontWeight(.bold)
-                    .foregroundColor(.yellow)
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .glassEffect(.clear)
-                .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 90)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
         }
     }
     
-    // MARK: - Delete & Undo Logic
-    
-    private func startPendingDelete(_ folder: Folder) {
-        // Cancel any existing pending delete first (commit it)
-        commitPendingDelete()
-        
-        withAnimation {
-            pendingDeleteFolder = folder
-            showUndoToast = true
-        }
-        
+    // MARK: - Delete Logic
+    private func deleteFolder(_ folder: Folder) {
         HapticManager.warning()
-        
-        pendingDeleteTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { _ in
-            DispatchQueue.main.async {
-                commitPendingDelete()
-            }
-        }
-    }
-    
-    private func commitPendingDelete() {
-        pendingDeleteTimer?.invalidate()
-        pendingDeleteTimer = nil
-        
-        guard let folder = pendingDeleteFolder else { return }
-        
         if folderPath.isEmpty {
             viewModel.deleteRootFolder(id: folder.id)
         } else {
             viewModel.deleteSubfolder(id: folder.id, from: folderPath)
-        }
-        
-        withAnimation {
-            pendingDeleteFolder = nil
-            showUndoToast = false
-        }
-    }
-    
-    private func undoDelete() {
-        pendingDeleteTimer?.invalidate()
-        pendingDeleteTimer = nil
-        
-        HapticManager.lightImpact()
-        
-        withAnimation {
-            pendingDeleteFolder = nil
-            showUndoToast = false
         }
     }
     
@@ -273,13 +202,15 @@ struct FolderDetailListView: View {
             )
             .swipeActions(edge: .trailing) {
                 Button(role: .destructive) {
-                    startPendingDelete(subfolder)
+                    deleteFolder(subfolder)
                 } label: {
                     Label("Eliminar", systemImage: "trash")
                 }
             }
             .contextMenu {
-                Button { viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx]) } label: {
+                Button {
+                    showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx])
+                } label: {
                     Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
                 }
                 Button {
@@ -311,7 +242,7 @@ struct FolderDetailListView: View {
                     }
                 }
                 Button(role: .destructive) {
-                    startPendingDelete(subfolder)
+                    deleteFolder(subfolder)
                 } label: {
                     Label("Eliminar", systemImage: "trash")
                 }

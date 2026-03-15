@@ -122,53 +122,45 @@ struct NewFolderSheet: View {
                 
                 // Creation Button
                 Button(action: {
-                    // Check for empty name
-                    if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        HapticManager.error()
-                        isNameFieldFocused = false
-                        showEmptyNameAlert = true
-                        return
+                    let validator = FolderNameValidator()
+                    let siblings: [Folder]
+                    if let path = folderPath, let parent = viewModel.getFolderFromPath(path) {
+                        siblings = parent.subfolders
+                    } else {
+                        siblings = viewModel.folders
                     }
-                    
-                    let nameToCheck = name
-                    
-                    // Check for duplicate name
-                    let existingNames: [String]
-                    if let path = folderPath {
-                        if let parent = viewModel.getFolderFromPath(path) {
-                            existingNames = parent.subfolders.map { $0.name.lowercased() }
+
+                    switch validator.validate(name, siblings: siblings) {
+                    case .success(let validName):
+                        // Create the element
+                        if let path = folderPath {
+                            viewModel.addSubfolder(name: validName, to: path, isFavorite: isFavorite, imageData: selectedImageData)
                         } else {
-                            existingNames = []
+                            viewModel.addRootFolder(name: validName, isFavorite: isFavorite, imageData: selectedImageData)
                         }
-                    } else {
-                        existingNames = viewModel.folders.map { $0.name.lowercased() }
-                    }
-                    
-                    if existingNames.contains(nameToCheck.lowercased()) {
+
+                        HapticManager.success()
+
+                        if batchMode {
+                            // Reset fields for next creation
+                            createdCount += 1
+                            createdNames.append(validName)
+                            name = ""
+                            isFavorite = false
+                            selectedImageData = nil
+                        } else {
+                            isPresented = false
+                        }
+                    case .failure(let error):
                         HapticManager.error()
                         isNameFieldFocused = false
-                        showDuplicateAlert = true
+                        switch error {
+                        case .emptyName:
+                            showEmptyNameAlert = true
+                        case .duplicateName:
+                            showDuplicateAlert = true
+                        }
                         return
-                    }
-                    
-                    // Create the element
-                    if let path = folderPath {
-                        viewModel.addSubfolder(name: nameToCheck, to: path, isFavorite: isFavorite, imageData: selectedImageData)
-                    } else {
-                        viewModel.addRootFolder(name: nameToCheck, isFavorite: isFavorite, imageData: selectedImageData)
-                    }
-                    
-                    HapticManager.success()
-                    
-                    if batchMode {
-                        // Reset fields for next creation
-                        createdCount += 1
-                        createdNames.append(nameToCheck)
-                        name = ""
-                        isFavorite = false
-                        selectedImageData = nil
-                    } else {
-                        isPresented = false
                     }
 
                 }) {
