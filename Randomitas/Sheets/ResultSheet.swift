@@ -27,6 +27,10 @@ struct ResultSheet: View {
     var isFavorite: Bool {
         viewModel.isFolderFavorite(folderId: currentFolder.id)
     }
+
+    var isHidden: Bool {
+        currentFolder.isHidden
+    }
     @State var imagePickerRequest: ImagePickerRequest?
     @State private var selectedDetent: PresentationDetent = .height(280)
     @State private var showingHiddenAncestorAlert = false
@@ -169,9 +173,9 @@ struct ResultSheet: View {
                                         viewModel.toggleFolderHidden(folder: currentFolder, path: path)
                                     }) {
                                         HStack(spacing: 4) {
-                                            Image(systemName: "eye.slash")
+                                            Image(systemName: isHidden ? "eye" : "eye.slash")
                                                 .font(.subheadline)
-                                            Text("Ocultar")
+                                            Text(isHidden ? "Mostrar" : "Ocultar")
                                                 .font(.subheadline)
                                                 .lineLimit(1)
                                                 .minimumScaleFactor(0.7)
@@ -179,8 +183,8 @@ struct ResultSheet: View {
                                         .frame(maxWidth: .infinity)
                                         .padding(.vertical, 12)
                                         .padding(.horizontal, 8)
-                                        .background(Color.gray.opacity(0.2))
-                                        .foregroundColor(.orange)
+                                        .background(isHidden ? Color.orange.opacity(0.2) : Color.clear)
+                                        .foregroundColor(isHidden ? .orange : .primary)
                                         .cornerRadius(10)
                                     }
                                     
@@ -271,8 +275,12 @@ struct ResultSheet: View {
                 selectedDetent = newValue != nil ? .height(620) : .height(280)
             }
         }
-        .presentationDetents(currentFolder.imageData != nil ? [.height(280), .height(620)] : [.height(280)], selection: $selectedDetent)
+        .presentationDetents(
+            currentFolder.imageData != nil ? [.height(620)] : [.height(280)],
+            selection: $selectedDetent
+        )
         .presentationContentInteraction(.scrolls)
+        .presentationDragIndicator(currentFolder.imageData != nil ? .hidden : .visible)
         .alert("Elemento Oculto", isPresented: $showHiddenFavoriteAlert) {
             Button("Ok", role: .cancel) { }
         } message: {

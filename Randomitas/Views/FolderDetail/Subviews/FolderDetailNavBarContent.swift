@@ -52,7 +52,7 @@ struct FolderDetailNavBarContent: ToolbarContent {
         }
 
         ToolbarItem(placement: .navigationBarTrailing) {
-            HStack(spacing: 12) {
+            HStack(spacing: 6) {
                 if folderPath.isEmpty {
                     if !uiState.isSelectionMode {
                         if liveFolder.subfolders.isEmpty {
