@@ -1,4 +1,4 @@
-import UIKit
+internal import UIKit
 
 extension UIImage {
     func resized(toMaxDimension maxDimension: CGFloat) -> UIImage {

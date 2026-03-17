@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña on 28/11/2025.
 //
 
-import UIKit
+internal import UIKit
 
 struct ImagePickerRequest: Identifiable {
     let id = UUID()

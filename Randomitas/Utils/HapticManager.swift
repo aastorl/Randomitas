@@ -5,7 +5,7 @@
 //  Created by Astor Ludueña on 21/01/2026.
 //
 
-import UIKit
+internal import UIKit
 
 /// Centralized haptic feedback manager for the app
 enum HapticManager {

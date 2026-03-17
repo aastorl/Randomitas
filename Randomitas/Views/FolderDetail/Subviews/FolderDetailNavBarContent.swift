@@ -15,6 +15,7 @@ struct FolderDetailNavBarContent: ToolbarContent {
     let sortedSubfolders: [Folder]
     let isInHiddenContext: Bool
     var isSearchFocused: FocusState<Bool>.Binding
+    let isPadLandscape: Bool
 
     var body: some ToolbarContent {
         ToolbarItem(placement: .principal) {
@@ -32,7 +33,7 @@ struct FolderDetailNavBarContent: ToolbarContent {
                     uiState.isSelectionMode = false
                     uiState.selectedItemIds.removeAll()
                 }
-            } else {
+            } else if !isPadLandscape || folderPath.isEmpty {
                 Button(action: {
                     if folderPath.isEmpty && liveFolder.subfolders.isEmpty {
                         uiState.showFirstElementAlert = true

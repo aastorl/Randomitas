@@ -152,6 +152,12 @@ struct FolderDetailGalleryView: View {
                     .frame(minWidth: 0, maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
+                    .blur(radius: subfolder.isHidden ? 12 : 0)
+                if subfolder.isHidden {
+                    Image(systemName: "eye.slash")
+                        .font(.system(size: 48))
+                        .foregroundColor(.orange)
+                }
             } else {
                 LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                     .frame(height: 300)

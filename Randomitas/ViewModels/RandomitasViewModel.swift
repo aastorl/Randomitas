@@ -88,13 +88,14 @@ class RandomitasViewModel: ObservableObject {
     }
 
     // MARK: - Folders
-    func addRootFolder(name: String, isFavorite: Bool = false, imageData: Data? = nil) {
+    @discardableResult
+    func addRootFolder(name: String, isFavorite: Bool = false, imageData: Data? = nil) -> UUID? {
         let result = folderOperationsService.addRootFolder(name: name, imageData: imageData)
         guard case .success(let newFolderId) = result else {
             if case .failure(let error) = result {
                 recordError(.repository(error))
             }
-            return
+            return nil
         }
         let newFolder = Folder(id: newFolderId, name: name, subfolders: [], imageData: imageData, createdAt: Date(), isHidden: false)
         folders = sortFoldersByName(folders + [newFolder])
@@ -102,6 +103,8 @@ class RandomitasViewModel: ObservableObject {
         if isFavorite, let path = findPathById(newFolderId), let folder = getFolderFromPath(path) {
             _ = toggleFolderFavorite(folder: folder, path: path)
         }
+        
+        return newFolderId
     }
 
     func deleteRootFolder(id: UUID) {
@@ -110,13 +113,14 @@ class RandomitasViewModel: ObservableObject {
     }
 
     // MARK: - Subfolders
-    func addSubfolder(name: String, to folderPath: [Int], isFavorite: Bool = false, imageData: Data? = nil) {
+    @discardableResult
+    func addSubfolder(name: String, to folderPath: [Int], isFavorite: Bool = false, imageData: Data? = nil) -> UUID? {
         let result = folderOperationsService.addSubfolder(name: name, to: folderPath, folders: folders, imageData: imageData)
         guard case .success(let newFolderId) = result else {
             if case .failure(let error) = result {
                 recordError(.repository(error))
             }
-            return
+            return nil
         }
 
         let newFolder = Folder(id: newFolderId, name: name, subfolders: [], imageData: imageData, createdAt: Date(), isHidden: false)
@@ -125,6 +129,8 @@ class RandomitasViewModel: ObservableObject {
         if isFavorite, let path = findPathById(newFolderId), let folder = getFolderFromPath(path) {
             _ = toggleFolderFavorite(folder: folder, path: path)
         }
+        
+        return newFolderId
     }
 
     func deleteSubfolder(id: UUID, from folderPath: [Int]) {

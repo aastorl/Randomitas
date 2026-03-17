@@ -6,6 +6,7 @@
 internal import SwiftUI
 internal import Combine
 internal import Combine
+internal import UIKit
 
 
 struct FolderDetailView: View {
@@ -26,9 +27,11 @@ struct FolderDetailView: View {
     
 
     @FocusState private var isSearchFocused: Bool
-    
+
     // Folder Result State
     @Binding var navigationPath: NavigationPath
+
+    @State private var isPadLandscapeState = false
     
     // Dynamic access to live data
     var liveFolder: Folder {
@@ -257,7 +260,8 @@ struct FolderDetailView: View {
                     folderPath: folderPath,
                     sortedSubfolders: sortedSubfolders,
                     isInHiddenContext: isInHiddenContext,
-                    isSearchFocused: $isSearchFocused
+                    isSearchFocused: $isSearchFocused,
+                    isPadLandscape: isPadLandscapeState
                 )
             }
     }
@@ -283,24 +287,66 @@ struct FolderDetailView: View {
     }
 
     private var mainLayout: some View {
-        ZStack {
-            Color(.systemBackground).ignoresSafeArea()
-            contentStack
-            overlayStack
+        GeometryReader { proxy in
+            let isPadLandscape = isPadLandscapeLayout(proxy.size)
+
+            ZStack {
+                Color(.systemBackground).ignoresSafeArea()
+                contentStack(isPadLandscape: isPadLandscape)
+                overlayStack(isPadLandscape: isPadLandscape)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onAppear {
+                if isPadLandscapeState != isPadLandscape {
+                    isPadLandscapeState = isPadLandscape
+                }
+            }
+            .onChange(of: proxy.size) { newSize in
+                let newValue = isPadLandscapeLayout(newSize)
+                if isPadLandscapeState != newValue {
+                    isPadLandscapeState = newValue
+                }
+            }
         }
     }
 
-    private var contentStack: some View {
-        VStack(spacing: 0) {
-            FolderDetailToolbarView(
-                viewModel: viewModel,
-                uiState: uiState,
-                folderPath: folderPath,
-                liveFolder: liveFolder
-            )
-            ZStack {
-                contentBackground
-                contentBody
+    private func contentStack(isPadLandscape: Bool) -> some View {
+        Group {
+            if isPadLandscape {
+                HStack(spacing: 0) {
+                    FolderDetailToolbarView(
+                        viewModel: viewModel,
+                        uiState: uiState,
+                        folderPath: folderPath,
+                        liveFolder: liveFolder,
+                        isPadLandscape: true,
+                        showSearchButton: isPadLandscapeState && !folderPath.isEmpty,
+                        onSearch: openSearch
+                    )
+                    .frame(width: 88)
+                    .frame(maxHeight: .infinity, alignment: .top)
+
+                    ZStack {
+                        contentBackground
+                        contentBody
+                    }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    FolderDetailToolbarView(
+                        viewModel: viewModel,
+                        uiState: uiState,
+                        folderPath: folderPath,
+                        liveFolder: liveFolder,
+                        isPadLandscape: false,
+                        showSearchButton: isPadLandscapeState && !folderPath.isEmpty,
+                        onSearch: openSearch
+                    )
+                    ZStack {
+                        contentBackground
+                        contentBody
+                    }
+                }
             }
         }
     }
@@ -366,7 +412,7 @@ struct FolderDetailView: View {
         }
     }
 
-    private var overlayStack: some View {
+    private func overlayStack(isPadLandscape: Bool) -> some View {
         Group {
             if !(folderPath.isEmpty && liveFolder.subfolders.isEmpty) {
                 if uiState.isSelectionMode {
@@ -376,14 +422,16 @@ struct FolderDetailView: View {
                         sortedSubfolders: sortedSubfolders,
                         folderPath: folderPath,
                         isInHiddenContext: isInHiddenContext,
-                        liveFolder: liveFolder
+                        liveFolder: liveFolder,
+                        isPadLandscape: isPadLandscape
                     )
                 } else {
                     FolderDetailBottomBarView(
                         uiState: uiState,
                         isInHiddenContext: isInHiddenContext,
                         randomizeAction: randomizeCurrentScreen,
-                        isSearchFocused: $isSearchFocused
+                        isSearchFocused: $isSearchFocused,
+                        isPadLandscape: isPadLandscape
                     )
                 }
             }
@@ -397,6 +445,10 @@ struct FolderDetailView: View {
             }
         }
     }
+
+    private func isPadLandscapeLayout(_ size: CGSize) -> Bool {
+        UIDevice.current.userInterfaceIdiom == .pad && size.width > size.height
+    }
     
     // MARK: - Helper Functions
 
@@ -409,6 +461,17 @@ struct FolderDetailView: View {
         } else {
             HapticManager.warning()
             uiState.showingEmptyRandomizeAlert = true
+        }
+    }
+
+    private func openSearch() {
+        if folderPath.isEmpty && liveFolder.subfolders.isEmpty {
+            uiState.showFirstElementAlert = true
+        } else {
+            withAnimation(.spring()) {
+                uiState.isSearching = true
+                isSearchFocused = true
+            }
         }
     }
     

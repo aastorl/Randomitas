@@ -20,6 +20,7 @@ struct NewFolderSheet: View {
     @State private var selectedImageData: Data?
     @State private var createdCount: Int = 0 // Track items created in batch mode
     @State private var createdNames: [String] = [] // Track names of created items
+    @State private var createdIds: [UUID] = [] // Track IDs of created items for undo
     @State private var showCreatedListPopup: Bool = false
     @State private var showDuplicateAlert: Bool = false
     @State private var showEmptyNameAlert: Bool = false
@@ -35,7 +36,7 @@ struct NewFolderSheet: View {
                         showCreatedListPopup = true
                     }) {
                         HStack {
-                            Image(systemName: "checkmark.circle.fill")
+                            Image(systemName: "atom")
                                 .foregroundColor(.green)
                             Text("\(createdCount) elemento\(createdCount > 1 ? "s" : "") creado\(createdCount > 1 ? "s" : "")")
                                 .font(.system(size: 14, weight: .medium))
@@ -133,10 +134,15 @@ struct NewFolderSheet: View {
                     switch validator.validate(name, siblings: siblings) {
                     case .success(let validName):
                         // Create the element
+                        let newId: UUID?
                         if let path = folderPath {
-                            viewModel.addSubfolder(name: validName, to: path, isFavorite: isFavorite, imageData: selectedImageData)
+                            newId = viewModel.addSubfolder(name: validName, to: path, isFavorite: isFavorite, imageData: selectedImageData)
                         } else {
-                            viewModel.addRootFolder(name: validName, isFavorite: isFavorite, imageData: selectedImageData)
+                            newId = viewModel.addRootFolder(name: validName, isFavorite: isFavorite, imageData: selectedImageData)
+                        }
+
+                        if let id = newId {
+                            createdIds.append(id)
                         }
 
                         HapticManager.success()
@@ -190,7 +196,7 @@ struct NewFolderSheet: View {
                 if batchMode {
                     ToolbarItem(placement: .principal) {
                         HStack(spacing: 6) {
-                            Image(systemName: "lock.fill")
+                            Image(systemName: "square.stack.3d.up")
                                 .foregroundColor(.orange)
                                 .font(.system(size: 12))
                             Text("Nuevo Elemento")
@@ -199,6 +205,14 @@ struct NewFolderSheet: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Cancelar") {
+                            // Undo all creations in this batch session
+                            for id in createdIds {
+                                if let path = folderPath {
+                                    viewModel.deleteSubfolder(id: id, from: path)
+                                } else {
+                                    viewModel.deleteRootFolder(id: id)
+                                }
+                            }
                             isPresented = false
                         }
                         .foregroundColor(.red)
