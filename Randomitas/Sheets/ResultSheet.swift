@@ -36,7 +36,7 @@ struct ResultSheet: View {
     @State private var showingHiddenAncestorAlert = false
     @State private var hiddenAncestorAlertName = ""
     
-    // Inline Renaming
+    // Renombrado en Línea
     @State private var isEditingName = false
     @State private var editingName = ""
     @FocusState private var isFocused: Bool
@@ -48,7 +48,7 @@ struct ResultSheet: View {
                 Color(.systemBackground).ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Header
+                    // Encabezado
                     HStack {
                         Button(action: { isPresented = false }) {
                             HStack(spacing: 6) {
@@ -61,7 +61,7 @@ struct ResultSheet: View {
                     }
                     .padding()
                     
-                    // Content
+                    // Contenido
                     ScrollView {
                         VStack(spacing: 24) {
                             // Imagen grande con context menu (solo si tiene imagen)
@@ -134,7 +134,7 @@ struct ResultSheet: View {
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                         HStack(spacing: 4) {
-                                            Text("< \(pathString)")
+                                            Text(verbatim: "< \(pathString)")
                                                 .font(.caption)
                                                 .foregroundColor(.secondary)
                                         }
@@ -241,7 +241,7 @@ struct ResultSheet: View {
                     }
                 }
             }
-            // Camera - fullscreen cover
+            // Cámara - cubierta en pantalla completa
             .fullScreenCover(item: Binding(
                 get: { imagePickerRequest?.isFullScreen == true ? imagePickerRequest : nil },
                 set: { imagePickerRequest = $0 }
@@ -254,7 +254,7 @@ struct ResultSheet: View {
                 }, sourceType: request.sourceType)
                 .ignoresSafeArea()
             }
-            // Photo Library - sheet
+            // Galería de fotos - modal
             .sheet(item: Binding(
                 get: { imagePickerRequest?.isFullScreen == false ? imagePickerRequest : nil },
                 set: { imagePickerRequest = $0 }
@@ -282,12 +282,12 @@ struct ResultSheet: View {
         .presentationContentInteraction(.scrolls)
         .presentationDragIndicator(currentFolder.imageData != nil ? .hidden : .visible)
         .alert("Elemento Oculto", isPresented: $showHiddenFavoriteAlert) {
-            Button("Ok", role: .cancel) { }
+            Button("OK", role: .cancel) { }
         } message: {
             Text("Los elementos ocultos no pueden ser favoritos. Desoculta este elemento primero.")
         }
         .alert("Elemento Protegido", isPresented: $showingHiddenAncestorAlert) {
-            Button("Ok", role: .cancel) { }
+            Button("OK", role: .cancel) { }
         } message: {
             Text("Para modificar la visibilidad de este elemento, debes desocultar: \(hiddenAncestorAlertName)")
         }
@@ -445,7 +445,7 @@ struct ResultSheet: View {
         }
     }
     
-    // MARK: - Helpers
+    // MARK: - Métodos Auxiliares
     
     private func handleImagePicked(_ image: UIImage) {
         let resizedImage = image.resized(toMaxDimension: 1024)

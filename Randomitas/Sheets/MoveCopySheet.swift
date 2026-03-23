@@ -16,18 +16,18 @@ struct MoveCopySheet: View {
     let isCopy: Bool
     var onSuccess: (() -> Void)? = nil
     
-    // State for Tree View
+    // Estado de la Vista de Árbol
     @State private var expandedFolderIds: Set<UUID> = []
     @State private var isRootExpanded: Bool = true
     @State private var selectedTargetFolder: Folder? = nil
     @State private var isRootSelected: Bool = false
     
-    // Alerts
+    // Alertas
     @State private var showingErrorAlert = false
-    @State private var errorMessage = ""
+    @State private var errorMessage: LocalizedStringKey = ""
     @State private var showingReplaceAlert = false
     
-    // New Element Sheet
+    // Sheet de Nuevo Elemento
     @State private var showingNewFolderSheet = false
     @State private var conflictingFolders: [Folder] = []
     
@@ -66,10 +66,10 @@ struct MoveCopySheet: View {
                 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 5) {
-                        // Root Node as part of tree
+                        // Nodo raíz como parte del árbol
                         VStack(alignment: .leading, spacing: 0) {
                             HStack {
-                                // Chevron for Root
+                                // Flecha desplegable para la raíz
                                 Image(systemName: "chevron.right")
                                     .rotationEffect(isRootExpanded ? .degrees(90) : .zero)
                                     .foregroundColor(.gray)
@@ -81,7 +81,7 @@ struct MoveCopySheet: View {
                                     .frame(width: 30, height: 30)
                                     .contentShape(Rectangle())
                                 
-                                // Root Icon & Name
+                                // Icono y nombre de la raíz
                                 Button(action: {
                                     selectRoot()
                                 }) {
@@ -110,7 +110,7 @@ struct MoveCopySheet: View {
                             .padding(.horizontal, 16)
                             .contentShape(Rectangle())
                             
-                            // Children of Root
+                            // Subcarpetas de la raíz
                             if isRootExpanded {
                                 LazyVStack(alignment: .leading, spacing: 0) {
                                     ForEach(viewModel.folders) { folder in
@@ -131,7 +131,7 @@ struct MoveCopySheet: View {
                     .padding(.vertical, 12)
                 }
                 
-                // Action Bar - Refinada
+                // Barra de Acciones - Refinada
                 VStack(spacing: 0) {
                     Divider()
                     
@@ -233,7 +233,7 @@ struct MoveCopySheet: View {
         return false
     }
     
-    // MARK: - Logic
+    // MARK: - Lógica
     
     private func selectRoot() {
         HapticManager.selection()
@@ -334,14 +334,14 @@ struct MoveCopySheet: View {
     private func validateAndPerformAction() {
         let targetPath = calculatePath(for: selectedTargetFolder)
         
-        // Check 1: Same location
+        // Verificación 1: Misma ubicación
         if targetPath == sourceContainerPath {
-             errorMessage = "No puedes \(isCopy ? "copiar" : "mover") a la misma ubicación."
+             errorMessage = isCopy ? "No puedes copiar a la misma ubicación." : "No puedes mover a la misma ubicación."
              showingErrorAlert = true
              return
         }
         
-        // Check 2: Moving into itself (Circular)
+        // Verificación 2: Movimiento cíclico (mover dentro de sí mismo)
         if !isCopy {
              if let selectedId = selectedTargetFolder?.id {
                  if foldersToMove.contains(where: { $0.id == selectedId || isSubfolderOf(folder: selectedTargetFolder!, parent: $0) }) {

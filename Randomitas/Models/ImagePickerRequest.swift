@@ -11,7 +11,7 @@ struct ImagePickerRequest: Identifiable {
     let id = UUID()
     let sourceType: UIImagePickerController.SourceType
     
-    /// Camera should be presented fullscreen, photo library as sheet
+    /// Muestra la cámara en pantalla completa y la galería en un sheet
     var isFullScreen: Bool {
         sourceType == .camera
     }

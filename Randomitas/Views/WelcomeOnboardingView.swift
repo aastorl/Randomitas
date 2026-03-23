@@ -68,14 +68,7 @@ struct WelcomeOnboardingView: View {
                         icon: "photo.fill",
                         iconColor: .green,
                         title: "Imágenes",
-                        description: "Adjuntá fotos a tus elementos para identificarlos visualmente. El fondo se transforma con la imagen."
-                    )
-                    
-                    FeatureRow(
-                        icon: "square.stack.fill",
-                        iconColor: .purple,
-                        title: "Modo Batch",
-                        description: "Creá muchos elementos de una vez manteniendo presionado el botón +. Ideal para listas largas."
+                        description: "Adjuntá fotos a tus elementos para identificarlos visualmente."
                     )
                     
                     FeatureRow(
@@ -96,7 +89,7 @@ struct WelcomeOnboardingView: View {
                         icon: "arrow.turn.up.right",
                         iconColor: .teal,
                         title: "Mover y Copiar",
-                        description: "Reorganizá tus elementos moviéndolos o copiándolos entre carpetas."
+                        description: "Reorganizá tus elementos moviéndolos o copiándolos entre elementos."
                     )
                     
                     FeatureRow(
@@ -177,8 +170,8 @@ struct WelcomeOnboardingView: View {
 private struct FeatureRow: View {
     let icon: String
     let iconColor: Color
-    let title: String
-    let description: String
+    let title: LocalizedStringKey
+    let description: LocalizedStringKey
     var isAssetImage: Bool = false
     
     var body: some View {

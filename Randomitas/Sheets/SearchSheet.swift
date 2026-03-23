@@ -32,7 +32,7 @@ struct SearchSheet: View {
                                         Text(folder.name)
                                             .foregroundColor(.primary)
                                         HStack(spacing: 4) {
-                                            Text("< \(parentName)")
+                                            Text(verbatim: "< \(parentName)")
                                                 .font(.caption)
                                         }
                                         .foregroundColor(.gray)

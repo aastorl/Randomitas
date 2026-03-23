@@ -34,7 +34,7 @@ struct FolderDetailBottomBarView: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.gray)
-                TextField("Buscar Elementos...", text: $uiState.searchText)
+                TextField("Buscar Elementos", text: $uiState.searchText)
                     .focused(isSearchFocused)
                     .submitLabel(.search)
 

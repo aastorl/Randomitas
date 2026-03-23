@@ -12,7 +12,7 @@ struct ToggleFavoriteResult {
     let showHiddenAlert: Bool
 }
 
-/// Domain rules for favorites (e.g., hidden elements cannot be favorited).
+/// Reglas de dominio para favoritos (ej. elementos ocultos no pueden ser favoritos).
 @MainActor
 final class FavoritesService {
     private let store: FavoritesStoreProtocol

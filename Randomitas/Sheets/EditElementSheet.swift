@@ -221,13 +221,13 @@ struct EditElementSheet: View {
                 get: { validationErrorMessage != nil },
                 set: { if !$0 { validationErrorMessage = nil } }
             )) {
-                Button("Ok", role: .cancel) {
+                Button("OK", role: .cancel) {
                     validationErrorMessage = nil
                 }
             } message: {
                 Text(validationErrorMessage ?? "")
             }
-            // Camera - fullscreen cover
+            // Cámara - cubierta en pantalla completa
             .fullScreenCover(item: Binding(
                 get: { imagePickerRequest?.isFullScreen == true ? imagePickerRequest : nil },
                 set: { imagePickerRequest = $0 }
@@ -241,7 +241,7 @@ struct EditElementSheet: View {
                 }, sourceType: request.sourceType)
                 .ignoresSafeArea()
             }
-            // Photo Library - sheet
+            // Galería de fotos - modal
             .sheet(item: Binding(
                 get: { imagePickerRequest?.isFullScreen == false ? imagePickerRequest : nil },
                 set: { imagePickerRequest = $0 }
@@ -255,7 +255,7 @@ struct EditElementSheet: View {
                 }, sourceType: request.sourceType)
             }
             .alert("Elemento Protegido", isPresented: $showingHiddenAncestorAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Para modificar la visibilidad de este elemento, debes desocultar: \(hiddenAncestorAlertName)")
             }

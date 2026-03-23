@@ -8,7 +8,7 @@
 import Foundation
 import os
 
-/// Stores images on disk and keeps a memory cache of decoded data.
+/// Almacena imágenes en disco y mantiene un caché en memoria de los datos decodificados.
 @MainActor
 final class ImageStore {
     static let shared = ImageStore()

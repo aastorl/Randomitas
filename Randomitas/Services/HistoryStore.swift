@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 import os
 
-/// Core Data store for history. loadHistory returns newest-first entries.
+/// Almacén de Core Data para el historial. Devuelve las entradas más recientes primero.
 @MainActor
 final class HistoryStore: HistoryStoreProtocol {
     private let coreDataStack: CoreDataStack

@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 import os
 
-/// Core Data repository for folders. loadRootFolders returns sorted, de-duplicated roots by id.
+/// Repositorio de Core Data para carpetas. Devuelve las carpetas raíz ordenadas y sin duplicados.
 @MainActor
 final class FolderRepository: FolderRepositoryProtocol {
     private let coreDataStack: CoreDataStack

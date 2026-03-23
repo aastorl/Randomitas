@@ -39,7 +39,7 @@ class CoreDataStack {
         container.viewContext.automaticallyMergesChangesFromParent = true
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         
-        // Clean database on first launch after restructuring to folders-only
+        // Limpiar base de datos en el primer inicio tras reestructurar para usar solo carpetas
         if !inMemory {
             cleanDatabaseIfNeeded()
         }
@@ -54,7 +54,7 @@ class CoreDataStack {
             
             let context = container.viewContext
             
-            // Delete all entities
+            // Eliminar todas las entidades
             let entityNames = ["FolderEntity", "HistoryEntity", "FolderFavoritesEntity"]
             
             for entityName in entityNames {
@@ -69,7 +69,7 @@ class CoreDataStack {
                 }
             }
             
-            // Save context
+            // Guardar contexto
             do {
                 try context.save()
                 userDefaults.set(true, forKey: hasCleanedKey)

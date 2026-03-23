@@ -16,7 +16,7 @@ struct FolderNameNormalizer {
         return trimmed
     }
 
-    /// Returns the uppercase first letter of the normalized sort name for section headers
+    /// Devuelve la primera letra en mayúscula del nombre normalizado para los encabezados de sección
     static func sectionLetter(for folder: Folder) -> String {
         let normalized = normalize(folder.name)
         guard let first = normalized.first else { return "#" }

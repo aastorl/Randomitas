@@ -14,8 +14,8 @@ struct ContentView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             FolderDetailView(
-                folder: viewModel.rootFolder, // Virtual Root Folder
-                folderPath: [], // Root Path
+                folder: viewModel.rootFolder, // Carpeta virtual principal
+                folderPath: [], // Ruta principal
                 viewModel: viewModel,
                 navigationPath: $navigationPath
             )

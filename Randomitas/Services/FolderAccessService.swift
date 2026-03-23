@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Read-only tree helpers and inherited image lookup.
+/// Funciones de solo lectura para el árbol y búsqueda de imágenes heredadas.
 struct FolderAccessService {
     func folder(at path: [Int], in folders: [Folder]) -> Folder? {
         FolderTree.folder(at: path, in: folders)

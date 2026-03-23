@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Domain operations for creating, deleting, moving and copying folders.
+/// Operaciones de dominio para crear, eliminar, mover y copiar carpetas.
 @MainActor
 final class FolderOperationsService {
     private let repository: FolderRepositoryProtocol

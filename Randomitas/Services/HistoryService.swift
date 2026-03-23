@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Domain rules for history retention and persistence.
+/// Reglas de dominio para la retención y persistencia del historial.
 @MainActor
 final class HistoryService {
     private let store: HistoryStoreProtocol

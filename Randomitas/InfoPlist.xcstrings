@@ -1,0 +1,40 @@
+{
+  "sourceLanguage" : "es",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We need access to your camera so you can attach photos to your items."
+          }
+        },
+        "es" : {
+            "stringUnit" : {
+              "state" : "translated",
+              "value" : "Necesitamos acceso a tu cámara para que puedas adjuntar fotos a tus elementos."
+            }
+        }
+      }
+    },
+    "NSPhotoLibraryUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We need access to your photo library so you can pick images for your items."
+          }
+        },
+        "es" : {
+            "stringUnit" : {
+              "state" : "translated",
+              "value" : "Necesitamos acceso a tu galería para que puedas elegir imágenes para tus elementos."
+            }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

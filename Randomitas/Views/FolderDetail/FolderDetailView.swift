@@ -130,7 +130,7 @@ struct FolderDetailView: View {
                 showHiddenFavoriteAlert: $uiState.showHiddenFavoriteAlert
             ))
             .alert("Error", isPresented: $uiState.showingErrorAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text(uiState.errorMessage ?? "Ha ocurrido un error inesperado")
             }
@@ -502,27 +502,27 @@ private struct AlertsModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert("Sin Elementos", isPresented: $showFirstElementAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Crea tu primer elemento para comenzar")
             }
             .alert("Sin Elementos", isPresented: $showingEmptyRandomizeAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("No hay elementos disponibles para randomizar.")
             }
             .alert("Elemento Protegido", isPresented: $showingHiddenAncestorAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Para modificar la visibilidad de este elemento, debes desocultar: \(hiddenAncestorAlertName)")
             }
             .alert("Elemento Oculto", isPresented: $showingHiddenRandomizeAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Los elementos ocultos no participan en la randomización. Desoculta este elemento para poder randomizar.")
             }
             .alert("Elemento Oculto", isPresented: $showHiddenFavoriteAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Los elementos ocultos no pueden ser favoritos. Desoculta este elemento primero.")
             }

@@ -12,15 +12,15 @@ struct NewFolderSheet: View {
     @ObservedObject var viewModel: RandomitasViewModel
     var folderPath: [Int]? = nil
     @Binding var isPresented: Bool
-    var batchMode: Bool = false // New: enables consecutive creation
+    var batchMode: Bool = false // Activa la creación consecutiva
     
     @State var name: String = ""
     @State private var isFavorite: Bool = false
     @State private var imagePickerRequest: ImagePickerRequest?
     @State private var selectedImageData: Data?
-    @State private var createdCount: Int = 0 // Track items created in batch mode
-    @State private var createdNames: [String] = [] // Track names of created items
-    @State private var createdIds: [UUID] = [] // Track IDs of created items for undo
+    @State private var createdCount: Int = 0 // Contador de elementos creados en el lote
+    @State private var createdNames: [String] = [] // Nombres de los elementos creados
+    @State private var createdIds: [UUID] = [] // IDs de los elementos creados para deshacer
     @State private var showCreatedListPopup: Bool = false
     @State private var showDuplicateAlert: Bool = false
     @State private var showEmptyNameAlert: Bool = false
@@ -30,7 +30,7 @@ struct NewFolderSheet: View {
         NavigationStack {
             ScrollView {
             VStack(spacing: 20) {
-                // Batch mode indicator
+                // Indicador del modo por lotes
                 if batchMode && createdCount > 0 {
                     Button(action: {
                         showCreatedListPopup = true
@@ -53,7 +53,7 @@ struct NewFolderSheet: View {
                     .padding(.bottom, -10)
                 }
                 
-                // Input Fields
+                // Campos de entrada
                 VStack(spacing: 15) {
                     TextField("Nombre del Elemento", text: $name)
                         .focused($isNameFieldFocused)
@@ -121,7 +121,7 @@ struct NewFolderSheet: View {
                     }
                 }
                 
-                // Creation Button
+                // Botón de creación
                 Button(action: {
                     let validator = FolderNameValidator()
                     let siblings: [Folder]
@@ -133,7 +133,7 @@ struct NewFolderSheet: View {
 
                     switch validator.validate(name, siblings: siblings) {
                     case .success(let validName):
-                        // Create the element
+                        // Crear el elemento
                         let newId: UUID?
                         if let path = folderPath {
                             newId = viewModel.addSubfolder(name: validName, to: path, isFavorite: isFavorite, imageData: selectedImageData)
@@ -148,7 +148,7 @@ struct NewFolderSheet: View {
                         HapticManager.success()
 
                         if batchMode {
-                            // Reset fields for next creation
+                            // Reiniciar campos para la siguiente creación
                             createdCount += 1
                             createdNames.append(validName)
                             name = ""
@@ -205,7 +205,7 @@ struct NewFolderSheet: View {
                     }
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("Cancelar") {
-                            // Undo all creations in this batch session
+                            // Deshacer todas las creaciones en esta sesión del modo por lotes
                             for id in createdIds {
                                 if let path = folderPath {
                                     viewModel.deleteSubfolder(id: id, from: path)
@@ -219,7 +219,7 @@ struct NewFolderSheet: View {
                     }
                 }
             }
-            // Camera - fullscreen cover
+            // Cámara - cubierta en pantalla completa
             .fullScreenCover(item: Binding(
                 get: { imagePickerRequest?.isFullScreen == true ? imagePickerRequest : nil },
                 set: { imagePickerRequest = $0 }
@@ -232,7 +232,7 @@ struct NewFolderSheet: View {
                 }, sourceType: request.sourceType)
                 .ignoresSafeArea()
             }
-            // Photo Library - sheet
+            // Galería de fotos - modal
             .sheet(item: Binding(
                 get: { imagePickerRequest?.isFullScreen == false ? imagePickerRequest : nil },
                 set: { imagePickerRequest = $0 }
@@ -245,24 +245,24 @@ struct NewFolderSheet: View {
                 }, sourceType: request.sourceType)
             }
             .alert("Nombre duplicado", isPresented: $showDuplicateAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Ya existe un elemento con el mismo nombre")
             }
             .alert("Nombre requerido", isPresented: $showEmptyNameAlert) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text("Por favor ingresa un nombre para el elemento")
             }
             .alert("Elementos Creados", isPresented: $showCreatedListPopup) {
-                Button("Ok", role: .cancel) { }
+                Button("OK", role: .cancel) { }
             } message: {
                 Text(createdNames.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"))
             }
         }
         .presentationDetents([selectedImageData != nil ? .fraction(0.75) : .fraction(0.45)])
         .onAppear {
-            // Haptic feedback: double for batch mode, single for individual
+            // Respuesta háptica: doble para lote posterior, simple al instante
             if batchMode {
                 HapticManager.doubleLightImpact()
             } else {

@@ -14,10 +14,10 @@ struct SortMenuView: View {
         Menu {
             Section("Ordenar por nombre") {
                 Button(action: { sortType = .nameAsc }) {
-                    Label("A - Z", systemImage: sortType == .nameAsc ? "checkmark" : "")
+                    Label("A → Z", systemImage: sortType == .nameAsc ? "checkmark" : "")
                 }
                 Button(action: { sortType = .nameDesc }) {
-                    Label("Z - A", systemImage: sortType == .nameDesc ? "checkmark" : "")
+                    Label("Z → A", systemImage: sortType == .nameDesc ? "checkmark" : "")
                 }
             }
             

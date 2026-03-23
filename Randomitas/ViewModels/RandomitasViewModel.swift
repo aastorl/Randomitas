@@ -15,7 +15,7 @@ class RandomitasViewModel: ObservableObject {
     private let logger = Logger(subsystem: "Randomitas", category: "RandomitasViewModel")
     @Published var folders: [Folder] = []
 
-    // Virtual Root Folder for Unified Architecture
+    // Carpeta raíz virtual para arquitectura unificada
     var rootFolder: Folder {
         Folder(id: UUID(uuidString: "00000000-0000-0000-0000-000000000000")!, name: "Randomitas", subfolders: folders, imageData: nil, createdAt: Date(), isHidden: false)
     }
@@ -70,7 +70,7 @@ class RandomitasViewModel: ObservableObject {
         loadFolderFavorites()
         loadHistory()
 
-        // Limpieza deshabilitada - causaba que los elementos ocultos se borraran al reiniciar
+        // Limpieza deshabilitada para evitar que los elementos ocultos se borren al reiniciar
         // cleanAllHiddenSubfolders()
     }
 
@@ -87,7 +87,7 @@ class RandomitasViewModel: ObservableObject {
         history = historyService.loadHistory()
     }
 
-    // MARK: - Folders
+    // MARK: - Carpetas
     @discardableResult
     func addRootFolder(name: String, isFavorite: Bool = false, imageData: Data? = nil) -> UUID? {
         let result = folderOperationsService.addRootFolder(name: name, imageData: imageData)
@@ -112,7 +112,7 @@ class RandomitasViewModel: ObservableObject {
         folders.removeAll { $0.id == id }
     }
 
-    // MARK: - Subfolders
+    // MARK: - Subcarpetas
     @discardableResult
     func addSubfolder(name: String, to folderPath: [Int], isFavorite: Bool = false, imageData: Data? = nil) -> UUID? {
         let result = folderOperationsService.addSubfolder(name: name, to: folderPath, folders: folders, imageData: imageData)
@@ -138,7 +138,7 @@ class RandomitasViewModel: ObservableObject {
         folders = removeSubfolder(id: id, at: folderPath, in: folders)
     }
 
-    // MARK: - Helper Methods
+    // MARK: - Métodos Auxiliares
     private func getFolderAtPath(_ indices: [Int]) -> Folder? {
         folderAccessService.folder(at: indices, in: folders)
     }
@@ -204,22 +204,22 @@ class RandomitasViewModel: ObservableObject {
         }
     }
 
-    // Helper to normalize names for sorting
+    // Normaliza nombres para ordenamiento
     func sortName(for name: String) -> String {
         FolderNameNormalizer.normalize(name)
     }
 
-    /// Returns the uppercase first letter of the normalized sort name for section headers
+    /// Devuelve la primera letra en mayúscula del nombre normalizado para los encabezados de sección
     func sectionLetter(for folder: Folder) -> String {
         FolderNameNormalizer.sectionLetter(for: folder)
     }
 
-    // MARK: - State Check
+    // MARK: - Verificación de Estado
     func folderHasSubfolders(at indices: [Int]) -> Bool {
         folderAccessService.folderHasSubfolders(at: indices, in: folders)
     }
 
-    // MARK: - Folder Favorites
+    // MARK: - Favoritos
     func toggleFolderFavorite(folder: Folder, path: [Int]) -> Bool {
         let result = favoritesService.toggleFavorite(
             folder: folder,
@@ -235,7 +235,7 @@ class RandomitasViewModel: ObservableObject {
         folderFavorites.contains { $0.id == folderId }
     }
 
-    /// Busca un folder por UUID en todo el árbol y retorna su path dinámico actual
+    /// Busca una carpeta por UUID en todo el árbol y retorna su ruta dinámica actual
     func findPathById(_ id: UUID) -> [Int]? {
         FolderTree.findPathById(id, in: folders)
     }
@@ -244,19 +244,19 @@ class RandomitasViewModel: ObservableObject {
         folderFavorites = favoritesService.removeFavorites(at: offsets, currentFavorites: folderFavorites)
     }
 
-    // MARK: - Hidden Folders
+    // MARK: - Carpetas Ocultas
     func toggleFolderHidden(folder: Folder, path: [Int]) {
         hiddenFoldersService.toggleHidden(at: path, folders: folders)
         loadFolders()
         loadFolderFavorites()
     }
 
-    // Verificar si una carpeta o alguno de sus ancestros está oculto
+    // Verifica si una carpeta o alguno de sus ancestros está oculto
     func isHiddenOrHasHiddenAncestor(at path: [Int]) -> Bool {
         hiddenFoldersService.isHiddenOrHasHiddenAncestor(at: path, folders: folders)
     }
 
-    /// Returns the name of the first hidden ancestor (NOT including the folder itself)
+    /// Devuelve el nombre del primer ancestro oculto (sin incluir la carpeta en sí)
     func getHiddenAncestorName(at path: [Int]) -> String? {
         hiddenFoldersService.hiddenAncestorName(at: path, folders: folders)
     }
@@ -278,7 +278,7 @@ class RandomitasViewModel: ObservableObject {
         loadFolderFavorites()
     }
 
-    // MARK: - History
+    // MARK: - Historial
     private func saveHistory(_ entry: HistoryEntry) {
         history = historyService.saveHistory(entry)
     }
@@ -291,7 +291,7 @@ class RandomitasViewModel: ObservableObject {
         history = historyService.removeHistoryEntry(id: id)
     }
 
-    // MARK: - Images
+    // MARK: - Imágenes
     func updateFolderImage(imageData: Data?, at folderPath: [Int]) {
         logger.info("updateFolderImage llamado con path: \(folderPath, privacy: .public)")
         logger.info("Carpetas disponibles: \(self.folders.count), buscando índice: \(folderPath.first ?? -1)")
@@ -309,17 +309,17 @@ class RandomitasViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Helper for getting folder from path
+    // MARK: - Obtención de Carpetas por Ruta
     func getFolderFromPath(_ path: [Int]) -> Folder? {
         folderAccessService.folder(at: path, in: folders)
     }
 
-    /// Gets the image data for a folder, checking the folder first then its ancestors
+    /// Obtiene los datos de imagen de una carpeta, verificando primero la carpeta y luego sus ancestros
     func getInheritedImageData(for path: [Int]) -> Data? {
         folderAccessService.inheritedImageData(for: path, in: folders)
     }
 
-    // MARK: - Rename Methods
+    // MARK: - Renombrado
     func renameFolder(id: UUID, newName: String) {
         switch folderOperationsService.renameFolder(id: id, newName: newName) {
         case .success:
@@ -339,7 +339,7 @@ class RandomitasViewModel: ObservableObject {
         logger.error("Domain error: \(error.localizedDescription, privacy: .public)")
     }
 
-    // MARK: - Sort Preferences
+    // MARK: - Preferencias de Ordenamiento
     func getSortType(for folderId: UUID?) -> SortType {
         preferencesStore.getSortType(for: folderId)
     }
@@ -365,7 +365,7 @@ class RandomitasViewModel: ObservableObject {
         }
     }
 
-    // MARK: - View Preferences
+    // MARK: - Preferencias de Vista
     func getViewType(for folderId: UUID?) -> ViewType {
         preferencesStore.getViewType(for: folderId)
     }
@@ -374,7 +374,7 @@ class RandomitasViewModel: ObservableObject {
         preferencesStore.setViewType(viewType, for: folderId)
     }
 
-    // MARK: - Hidden Elements View State (in-memory only)
+    // MARK: - Estado de Elementos Ocultos (solo en memoria)
     func getShowingHiddenElements(for path: [Int]) -> Bool {
         hiddenElementsViewState.isShowingHiddenElements(for: path)
     }
@@ -383,7 +383,7 @@ class RandomitasViewModel: ObservableObject {
         hiddenElementsViewState.setShowingHiddenElements(showing, for: path)
     }
 
-    // MARK: - Move & Copy
+    // MARK: - Mover y Copiar
     func moveFolderById(id: UUID, toFolderId targetFolderId: UUID?) {
         folderOperationsService.moveFolderById(id: id, toFolderId: targetFolderId)
         loadFolders()
@@ -404,7 +404,7 @@ class RandomitasViewModel: ObservableObject {
         loadFolders()
     }
 
-    // MARK: - Batch Operations
+    // MARK: - Operaciones en Lote
     func batchDeleteRootFolders(ids: Set<UUID>) {
         folderOperationsService.batchDeleteRootFolders(ids: ids)
         loadFolders()
@@ -427,7 +427,7 @@ class RandomitasViewModel: ObservableObject {
         loadFolderFavorites()
     }
 
-    // MARK: - Search
+    // MARK: - Búsqueda
     func getReversedPathString(for path: [Int]) -> String {
         folderAccessService.reversedPathString(for: path, in: folders)
     }
@@ -436,7 +436,7 @@ class RandomitasViewModel: ObservableObject {
         FolderTree.search(query: query, in: folders)
     }
 
-    // MARK: - Randomize Folder
+    // MARK: - Selección Aleatoria
     func randomizeCurrentScreen(at path: [Int]) -> (folder: Folder, path: [Int])? {
         randomizer.randomizeCurrentScreen(
             at: path,
@@ -459,7 +459,7 @@ class RandomitasViewModel: ObservableObject {
         )
     }
 
-    // Legacy method for compatibility (redirects to randomizeCurrentScreen)
+    // Método heredado por compatibilidad (redirige a randomizeCurrentScreen)
     func randomizeFolderOnly(at path: [Int]) -> (folder: Folder, path: [Int])? {
         randomizeCurrentScreen(at: path)
     }

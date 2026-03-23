@@ -7,60 +7,60 @@
 
 internal import UIKit
 
-/// Centralized haptic feedback manager for the app
+/// Gestor centralizado de respuestas hápticas de la app
 enum HapticManager {
     
-    // MARK: - Impact Feedback
+    // MARK: - Respuestas de Impacto
     
-    /// Light impact - for subtle button taps (navigation, toggles)
+    /// Impacto ligero - para toques sutiles de botones (navegación, interruptores)
     static func lightImpact() {
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()
     }
     
-    /// Medium impact - for main action buttons (create, confirm, shuffle)
+    /// Impacto medio - para botones principales (crear, confirmar, aleatorio)
     static func mediumImpact() {
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
     }
     
-    /// Heavy impact - for destructive or important actions (delete)
+    /// Impacto fuerte - para acciones importantes o destructivas (eliminar)
     static func heavyImpact() {
         let generator = UIImpactFeedbackGenerator(style: .heavy)
         generator.impactOccurred()
     }
     
-    // MARK: - Notification Feedback
+    // MARK: - Respuestas de Notificación
     
-    /// Success notification - for successful operations (element created, edits saved)
+    /// Notificación de éxito - para operaciones exitosas (elemento creado, edición guardada)
     static func success() {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.success)
     }
     
-    /// Warning notification - for warnings or caution actions
+    /// Notificación de advertencia - para advertencias o acciones preventivas
     static func warning() {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.warning)
     }
     
-    /// Error notification - for error states
+    /// Notificación de error - para estados de error
     static func error() {
         let generator = UINotificationFeedbackGenerator()
         generator.notificationOccurred(.error)
     }
     
-    // MARK: - Selection Feedback
+    // MARK: - Respuestas de Selección
     
-    /// Selection changed - for picker changes, toggles, selection mode
+    /// Cambio de selección - para pickers, toggles y selección de elementos
     static func selection() {
         let generator = UISelectionFeedbackGenerator()
         generator.selectionChanged()
     }
     
-    // MARK: - Special Patterns
+    // MARK: - Patrones Especiales
     
-    /// Double light impact - for batch mode entry (two quick taps)
+    /// Doble impacto ligero - para entrar al modo selección múltiple (dos toques rápidos)
     static func doubleLightImpact() {
         let generator = UIImpactFeedbackGenerator(style: .light)
         generator.impactOccurred()

@@ -28,7 +28,7 @@ struct HistorySheet: View {
         NavigationStack {
             Group {
                 if validHistory.isEmpty {
-                    // Empty State
+                    // Estado vacío
                     SheetEmptyStateView(
                         icon: "clock.arrow.circlepath",
                         title: "Sin Historial",
@@ -90,7 +90,7 @@ struct HistorySheet: View {
                 }
             } message: {
                 if let popup = showingPathPopup {
-                    Text("< \(popup.path)\n\n\(popup.timestamp.formatted(date: .abbreviated, time: .shortened))")
+                    Text(verbatim: "< \(popup.path)\n\n\(popup.timestamp.formatted(date: .abbreviated, time: .shortened))")
                 }
             }
         }

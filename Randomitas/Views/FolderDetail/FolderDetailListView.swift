@@ -9,7 +9,7 @@ internal import SwiftUI
 
 struct FolderDetailListView: View {
     @ObservedObject var viewModel: RandomitasViewModel
-    // removed @ObservedObject var folder: FolderWrapper - not needed if we rely on sortedSubfolders + path
+    // @ObservedObject var folder: FolderWrapper eliminado - no es necesario si dependemos de sortedSubfolders + path
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
     let sortType: RandomitasViewModel.SortType
@@ -21,7 +21,7 @@ struct FolderDetailListView: View {
     
     @Binding var editingElement: EditingInfo?
     
-    // Delete policy: immediate delete (consistent across views)
+    // Política de eliminación: eliminación inmediata (consistente en todas las vistas)
     
     @Binding var imagePickerRequest: ImagePickerRequest?
     @Binding var moveCopyOperation: MoveCopyOperation?
@@ -39,12 +39,12 @@ struct FolderDetailListView: View {
         sortedSubfolders
     }
     
-    /// Whether to show alphabetical section headers
+    /// Indica si se deben mostrar los encabezados de sección alfabéticos
     private var isAlphabeticalSort: Bool {
         sortType == .nameAsc || sortType == .nameDesc
     }
     
-    /// Groups sorted subfolders by their first letter (using sortName logic)
+    /// Agrupa las subcarpetas ordenadas por su primera letra (usando la lógica de sortName)
     private var groupedSubfolders: [(letter: String, folders: [Folder])] {
         var groups: [(String, [Folder])] = []
         var currentLetter = ""
@@ -117,7 +117,7 @@ struct FolderDetailListView: View {
         }
     }
     
-    // MARK: - Delete Logic
+    // MARK: - Lógica de Eliminación
     private func deleteFolder(_ folder: Folder) {
         HapticManager.warning()
         if folderPath.isEmpty {
@@ -129,7 +129,7 @@ struct FolderDetailListView: View {
     
     @ViewBuilder
     private func subfolderRow(_ subfolder: Folder) -> some View {
-        // Calculate index - returns nil if subfolder no longer exists in the live data
+        // Calcula el índice - retorna nil si la subcarpeta ya no existe en los datos
         let idx: Int? = {
             if folderPath.isEmpty {
                 return viewModel.folders.firstIndex(where: { $0.id == subfolder.id })
@@ -142,7 +142,7 @@ struct FolderDetailListView: View {
             }
         }()
         
-        // Guard against stale data - if element no longer exists, show disabled view
+        // Prevenir datos obsoletos: si el elemento ya no existe, mostrar vista deshabilitada
         if let validIdx = idx {
             ZStack(alignment: .leading) {
                 NavigationLink(destination: FolderDetailView(
@@ -157,7 +157,7 @@ struct FolderDetailListView: View {
                 .disabled(isSelectionMode)
                 
                 HStack(spacing: 12) {
-                    // Selection checkmark (left side)
+                    // Marca de verificación de selección (lado izquierdo)
                     if isSelectionMode {
                         Image(systemName: selectedItemIds.contains(subfolder.id) ? "checkmark.circle.fill" : "circle")
                             .foregroundColor(selectedItemIds.contains(subfolder.id) ? .blue : .gray)
@@ -226,7 +226,7 @@ struct FolderDetailListView: View {
                 }
                 Button {
                     if isInHiddenContext {
-                        // Show popup about hidden ancestor
+                        // Mostrar mensaje emergente sobre ancestro oculto
                         if let ancestorName = viewModel.getHiddenAncestorName(at: folderPath + [validIdx]) ?? viewModel.getFolderFromPath(folderPath).flatMap({ $0.isHidden ? $0.name : nil }) {
                             hiddenAncestorAlertName = ancestorName
                             showingHiddenAncestorAlert = true
@@ -248,7 +248,7 @@ struct FolderDetailListView: View {
                 }
             }
         } else {
-            // Element no longer exists - show placeholder
+            // El elemento ya no existe: mostrar marcador de posición
             HStack {
                 Image(systemName: "eye.slash")
                     .foregroundColor(.orange)

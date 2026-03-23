@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Navigation destination representing a folder path for NavigationStack
+/// Destino de navegación que representa la ruta de una carpeta en el NavigationStack
 struct FolderDestination: Hashable {
     let path: [Int]
 }

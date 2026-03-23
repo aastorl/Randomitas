@@ -211,7 +211,7 @@ struct HiddenFoldersSheet: View {
                 }
             } message: {
                 if let popup = showingPathPopup {
-                    Text("< \(popup.path)")
+                    Text(verbatim: "< \(popup.path)")
                 }
             }
         }

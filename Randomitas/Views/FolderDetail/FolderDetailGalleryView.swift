@@ -9,7 +9,7 @@ internal import SwiftUI
 
 struct FolderDetailGalleryView: View {
     @ObservedObject var viewModel: RandomitasViewModel
-    // removed FolderWrapper
+    // FolderWrapper eliminado
     let folderPath: [Int]
     let sortedSubfolders: [Folder]
     let sortType: RandomitasViewModel.SortType
@@ -28,17 +28,17 @@ struct FolderDetailGalleryView: View {
     @Binding var selectedItemIds: Set<UUID>
     var onOpenSearch: (() -> Void)? = nil
 
-    var highlightedItemId: UUID? // Added
+    var highlightedItemId: UUID? // Añadido
     
-    // Delete confirmation
+    // Confirmación de eliminación
     @State private var folderToDelete: Folder?
     
-    /// Whether to show alphabetical section headers
+    /// Indica si se deben mostrar los encabezados de sección alfabéticos
     private var isAlphabeticalSort: Bool {
         sortType == .nameAsc || sortType == .nameDesc
     }
     
-    /// Groups sorted subfolders by their first letter
+    /// Agrupa las subcarpetas ordenadas por su primera letra
     private var groupedSubfolders: [(letter: String, folders: [Folder])] {
         var groups: [(String, [Folder])] = []
         var currentLetter = ""
@@ -68,7 +68,7 @@ struct FolderDetailGalleryView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if isAlphabeticalSort {
                         ForEach(groupedSubfolders, id: \.letter) { group in
-                            // Section letter header
+                            // Encabezado de letra de sección
                             Text(group.letter)
                                 .font(.title3.bold())
                                 .foregroundColor(.secondary)
@@ -131,7 +131,7 @@ struct FolderDetailGalleryView: View {
     
     @ViewBuilder
     private func galleryFolderCell(_ subfolder: Folder) -> some View {
-        // Calculate index - returns nil if subfolder no longer exists in the live data
+        // Calcula el índice - retorna nil si la subcarpeta ya no existe en los datos
         let idx: Int? = {
             if folderPath.isEmpty {
                 return viewModel.folders.firstIndex(where: { $0.id == subfolder.id })
@@ -183,7 +183,7 @@ struct FolderDetailGalleryView: View {
                 .stroke(Color.gray.opacity(0.2), lineWidth: 1)
         )
         .overlay(
-            // Selection mode checkmark overlay
+            // Superposición de marca de verificación en modo de selección
             ZStack {
                 if isSelectionMode {
                     VStack {
@@ -204,7 +204,7 @@ struct FolderDetailGalleryView: View {
         .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
         
         // Usar NavigationLink o tap gesture según el modo
-        // Only show navigation/context if idx is valid (element still exists in live data)
+        // Mostrar navegación/contexto solo si el índice es válido (el elemento aún existe)
         if let validIdx = idx {
             Group {
                 if isSelectionMode {
@@ -269,7 +269,7 @@ struct FolderDetailGalleryView: View {
                 }
             }
         } else {
-            // Element no longer exists in live data - show content without interaction
+            // El elemento ya no existe: mostrar contenido sin interacción
             cellContent
                 .opacity(0.5)
         }

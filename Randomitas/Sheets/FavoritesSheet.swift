@@ -223,19 +223,19 @@ struct FavoritesSheet: View {
                 }
             } message: {
                 if let popup = showingPathPopup {
-                    Text("< \(popup.path)")
+                    Text(verbatim: "< \(popup.path)")
                 }
             }
         }
     }
 }
 
-// MARK: - Empty State View for Sheets
+// MARK: - Estado Vacío para Sheets
 
 struct SheetEmptyStateView: View {
     let icon: String
-    let title: String
-    let subtitle: String
+    let title: LocalizedStringKey
+    let subtitle: LocalizedStringKey
     
     var body: some View {
         VStack(spacing: 20) {
@@ -261,7 +261,7 @@ struct SheetEmptyStateView: View {
     }
 }
 
-// MARK: - Reusable Row View with Gradient Blur Background
+// MARK: - Fila Reutilizable con Fondo de Desenfoque Gradual
 
 struct SheetRowView: View {
     let name: String

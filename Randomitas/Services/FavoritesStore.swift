@@ -9,7 +9,7 @@ import Foundation
 import CoreData
 import os
 
-/// Core Data store for favorites. loadFavorites returns de-duplicated, name-sorted references.
+/// Almacén de Core Data para favoritos. Devuelve las referencias sin duplicados y ordenadas por nombre.
 @MainActor
 final class FavoritesStore: FavoritesStoreProtocol {
     private let coreDataStack: CoreDataStack

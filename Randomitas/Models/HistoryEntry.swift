@@ -9,10 +9,10 @@ import Foundation
 
 struct HistoryEntry: Identifiable {
     let id: UUID
-    let itemId: UUID // ID of the element for navigation
+    let itemId: UUID // ID del elemento para navegación
     let itemName: String
     let path: String
-    let folderPath: [Int] // Numeric path for navigation
+    let folderPath: [Int] // Ruta numérica para navegación
     let timestamp: Date
     
     init(

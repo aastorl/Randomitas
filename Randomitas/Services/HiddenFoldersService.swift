@@ -7,7 +7,7 @@
 
 import Foundation
 
-/// Encapsulates hidden-folder rules (ancestors, batch updates).
+/// Encapsula las reglas de carpetas ocultas (ancestros, actualizaciones en lote).
 @MainActor
 final class HiddenFoldersService {
     private let folderRepository: FolderRepositoryProtocol

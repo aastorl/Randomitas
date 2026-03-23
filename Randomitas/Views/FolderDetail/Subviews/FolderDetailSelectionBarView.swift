@@ -23,7 +23,7 @@ struct FolderDetailSelectionBarView: View {
                     Spacer()
                     VStack(spacing: 12) {
                         if !uiState.selectedItemIds.isEmpty {
-                            Text("\(uiState.selectedItemIds.count) seleccionado\(uiState.selectedItemIds.count > 1 ? "s" : "")")
+                            Text("^[\(uiState.selectedItemIds.count) seleccionado](inflect: true)")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.secondary)
                         }
@@ -48,7 +48,7 @@ struct FolderDetailSelectionBarView: View {
                 VStack(spacing: 0) {
                     Spacer()
                     if !uiState.selectedItemIds.isEmpty {
-                        Text("\(uiState.selectedItemIds.count) seleccionado\(uiState.selectedItemIds.count > 1 ? "s" : "")")
+                        Text("^[\(uiState.selectedItemIds.count) seleccionado](inflect: true)")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundColor(.secondary)
                             .padding(.bottom, 8)
