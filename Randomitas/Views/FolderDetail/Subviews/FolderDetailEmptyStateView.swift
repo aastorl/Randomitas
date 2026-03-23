@@ -74,7 +74,7 @@ struct FolderDetailEmptyStateView: View {
                         }
                         .frame(width: 100, height: 80)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .glassEffect(.clear)
+                        .appGlassEffect()
                         .scaleEffect(uiState.isPressedPlusButton ? 0.9 : 1.0)
                         .animation(.easeInOut(duration: 0.15), value: uiState.isPressedPlusButton)
                     }
@@ -139,7 +139,7 @@ struct FolderDetailEmptyStateView: View {
                         }
                         .frame(width: 100, height: 80)
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .glassEffect(.clear)
+                        .appGlassEffect()
                         .scaleEffect(uiState.isPressedPlusButton ? 0.9 : 1.0)
                         .animation(.easeInOut(duration: 0.15), value: uiState.isPressedPlusButton)
                     }

@@ -1,6 +1,18 @@
 {
   "sourceLanguage" : "es",
   "strings" : {
+    "CFBundleName" : {
+      "comment" : "Bundle name",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "es" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Randomitas"
+          }
+        }
+      }
+    },
     "NSCameraUsageDescription" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11,10 +23,10 @@
           }
         },
         "es" : {
-            "stringUnit" : {
-              "state" : "translated",
-              "value" : "Necesitamos acceso a tu cámara para que puedas adjuntar fotos a tus elementos."
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Necesitamos acceso a tu cámara para que puedas adjuntar fotos a tus elementos."
+          }
         }
       }
     },
@@ -28,10 +40,10 @@
           }
         },
         "es" : {
-            "stringUnit" : {
-              "state" : "translated",
-              "value" : "Necesitamos acceso a tu galería para que puedas elegir imágenes para tus elementos."
-            }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Necesitamos acceso a tu galería para que puedas elegir imágenes para tus elementos."
+          }
         }
       }
     }

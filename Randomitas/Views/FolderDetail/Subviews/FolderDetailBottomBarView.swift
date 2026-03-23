@@ -128,7 +128,7 @@ struct FolderDetailBottomBarView: View {
                 .foregroundColor(.orange)
                 .frame(width: 56, height: 56)
                 .clipShape(Circle())
-                .glassEffect(.clear)
+                .appGlassEffect()
         }
         .contentShape(Circle())
         .accessibilityIdentifier("hiddenFoldersButton")
@@ -149,7 +149,7 @@ struct FolderDetailBottomBarView: View {
                         .foregroundStyle(Color.accentColor)
                         .frame(width: 95, height: 56)
                         .clipShape(Capsule())
-                        .glassEffect(.clear)
+                        .appGlassEffect()
                 }
                 .contentShape(Capsule())
                 .accessibilityIdentifier("randomizeButtonDisabled")
@@ -163,7 +163,7 @@ struct FolderDetailBottomBarView: View {
                         .foregroundStyle(Color.accentColor)
                         .frame(width: 95, height: 56)
                         .clipShape(Capsule())
-                        .glassEffect(.clear)
+                        .appGlassEffect()
                 }
                 .contentShape(Capsule())
                 .accessibilityIdentifier("randomizeButton")
@@ -178,7 +178,7 @@ struct FolderDetailBottomBarView: View {
                 .foregroundColor(.yellow)
                 .frame(width: 56, height: 56)
                 .clipShape(Circle())
-                .glassEffect(.clear)
+                .appGlassEffect()
         }
         .contentShape(Circle())
         .accessibilityIdentifier("favoritesButton")
