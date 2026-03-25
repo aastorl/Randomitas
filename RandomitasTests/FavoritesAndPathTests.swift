@@ -9,6 +9,7 @@ import Testing
 @testable import Randomitas
 import Foundation
 
+@MainActor
 @Suite(.serialized)
 struct FavoritesAndPathTests {
     

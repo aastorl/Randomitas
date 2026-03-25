@@ -215,23 +215,24 @@ struct FolderDetailGridView: View {
         
         // Guard against stale data
         if let validIdx = idx {
+            let liveFolder = viewModel.getFolderFromPath(folderPath + [validIdx]) ?? subfolder
             NavigationLink(destination: FolderDetailView(
-                folder: subfolder,
+                folder: liveFolder,
                 folderPath: folderPath + [validIdx],
                 viewModel: viewModel,
                 navigationPath: $navigationPath
             )) {
                 VStack(spacing: 8) {
                     ZStack {
-                        if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
+                        if let imageData = liveFolder.imageData, let uiImage = UIImage(data: imageData) {
                             Image(uiImage: uiImage)
                                 .resizable()
                                 .scaledToFill()
                                 .frame(minWidth: 0, maxWidth: .infinity)
                                 .frame(height: 100)
                                 .clipped()
-                                .blur(radius: subfolder.isHidden ? 10 : 0)
-                            if subfolder.isHidden {
+                                .blur(radius: liveFolder.isHidden ? 10 : 0)
+                            if liveFolder.isHidden {
                                 Image(systemName: "eye.slash")
                                     .font(.system(size: 32))
                                     .foregroundColor(.orange)
@@ -239,7 +240,7 @@ struct FolderDetailGridView: View {
                         } else {
                             LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                                 .frame(height: 100)
-                                .overlay(Image(systemName: subfolder.isHidden ? "eye.slash" : "atom").font(.system(size: 32)).foregroundColor(subfolder.isHidden ? .orange : .blue))
+                                .overlay(Image(systemName: liveFolder.isHidden ? "eye.slash" : "atom").font(.system(size: 32)).foregroundColor(liveFolder.isHidden ? .orange : .blue))
                         }
                     }
                     .frame(height: 100)
@@ -250,7 +251,7 @@ struct FolderDetailGridView: View {
                     )
                     .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2)
                     
-                    Text(subfolder.name)
+                    Text(liveFolder.name)
                         .font(.system(size: 12, weight: .medium, design: .rounded))
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
@@ -261,18 +262,18 @@ struct FolderDetailGridView: View {
             .disabled(isSelectionMode)
             .contextMenu {
                 Button {
-                    showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx])
+                    showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: liveFolder, path: folderPath + [validIdx])
                 } label: {
-                    Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
+                    Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: liveFolder.id) ? "star.fill" : "star")
                 }
                 Button {
                     isSelectionMode = true
-                    selectedItemIds.insert(subfolder.id)
+                    selectedItemIds.insert(liveFolder.id)
                 } label: {
                     Label("Seleccionar", systemImage: "checkmark.circle")
                 }
                 Button {
-                    editingElement = EditingInfo(folder: subfolder, path: folderPath + [validIdx])
+                    editingElement = EditingInfo(folder: liveFolder, path: folderPath + [validIdx])
                 } label: {
                     Label("Editar", systemImage: "pencil")
                 }
@@ -283,17 +284,17 @@ struct FolderDetailGridView: View {
                             showingHiddenAncestorAlert = true
                         }
                     } else {
-                        viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                        viewModel.toggleFolderHidden(folder: liveFolder, path: folderPath + [validIdx])
                     }
                 } label: {
                     if isInHiddenContext {
                         Label("Mostrar", systemImage: "eye")
                     } else {
-                        Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                        Label(liveFolder.isHidden ? "Mostrar" : "Ocultar", systemImage: liveFolder.isHidden ? "eye" : "eye.slash")
                     }
                 }
                 Button(role: .destructive) {
-                    folderToDelete = subfolder
+                    folderToDelete = liveFolder
                 } label: {
                     Label("Eliminar", systemImage: "trash")
                 }

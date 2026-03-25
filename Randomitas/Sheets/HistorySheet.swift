@@ -14,6 +14,7 @@ struct HistorySheet: View {
     @Binding var highlightedItemId: UUID?
     
     @State private var showingPathPopup: (name: String, path: String, timestamp: Date)? = nil
+    @State private var showingClearHistoryConfirmation = false
     
     private var validHistory: [(entry: HistoryEntry, path: [Int])] {
         viewModel.history
@@ -77,9 +78,19 @@ struct HistorySheet: View {
             .navigationTitle("Historial (24hs)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Borrar todo") { showingClearHistoryConfirmation = true }
+                        .disabled(validHistory.isEmpty)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cerrar") { isPresented = false }
                 }
+            }
+            .confirmationDialog("¿Estás seguro?", isPresented: $showingClearHistoryConfirmation, titleVisibility: .visible) {
+                Button("Borrar todo", role: .destructive) {
+                    viewModel.clearHistory()
+                }
+                Button("Cancelar", role: .cancel) {}
             }
             .alert(showingPathPopup?.name ?? "", isPresented: Binding(
                 get: { showingPathPopup != nil },

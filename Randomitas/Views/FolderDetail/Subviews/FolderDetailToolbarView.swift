@@ -151,6 +151,7 @@ struct FolderDetailToolbarView: View {
                         uiState.showingNewFolderSheet = true
                     }
             )
+
         }
     }
 }

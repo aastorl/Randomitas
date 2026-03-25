@@ -144,31 +144,40 @@ struct FolderDetailGalleryView: View {
             }
         }()
         
+        let displayFolder: Folder = {
+            if let validIdx = idx, let liveFolder = viewModel.getFolderFromPath(folderPath + [validIdx]) {
+                return liveFolder
+            }
+            return subfolder
+        }()
+
         let cellContent = ZStack(alignment: .bottomLeading) {
-            if let imageData = subfolder.imageData, let uiImage = UIImage(data: imageData) {
+            if let imageData = displayFolder.imageData, let uiImage = UIImage(data: imageData) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFill()
                     .frame(minWidth: 0, maxWidth: .infinity)
                     .frame(height: 300)
                     .clipped()
-                    .blur(radius: subfolder.isHidden ? 12 : 0)
-                if subfolder.isHidden {
-                    Image(systemName: "eye.slash")
-                        .font(.system(size: 48))
-                        .foregroundColor(.orange)
-                }
+                    .blur(radius: displayFolder.isHidden ? 12 : 0)
+                    .overlay(alignment: .center) {
+                        if displayFolder.isHidden {
+                            Image(systemName: "eye.slash")
+                                .font(.system(size: 48))
+                                .foregroundColor(.orange)
+                        }
+                    }
             } else {
                 LinearGradient(gradient: Gradient(colors: [Color(.systemGray5), Color(.systemGray4)]), startPoint: .topLeading, endPoint: .bottomTrailing)
                     .frame(height: 300)
-                    .overlay(Image(systemName: subfolder.isHidden ? "eye.slash" : "atom").font(.system(size: 48)).foregroundColor(subfolder.isHidden ? .orange : .blue))
+                    .overlay(Image(systemName: displayFolder.isHidden ? "eye.slash" : "atom").font(.system(size: 48)).foregroundColor(displayFolder.isHidden ? .orange : .blue))
             }
             
             LinearGradient(gradient: Gradient(colors: [Color.black.opacity(0.5), Color.clear]), startPoint: .bottom, endPoint: .top)
                 .frame(height: 100)
             
             HStack {
-                Text(subfolder.name)
+                Text(displayFolder.name)
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                 Spacer()
@@ -219,7 +228,7 @@ struct FolderDetailGalleryView: View {
                         }
                 } else {
                     NavigationLink(destination: FolderDetailView(
-                        folder: subfolder,
+                        folder: displayFolder,
                         folderPath: folderPath + [validIdx],
                         viewModel: viewModel,
                         navigationPath: $navigationPath
@@ -231,18 +240,18 @@ struct FolderDetailGalleryView: View {
             }
             .contextMenu {
                 Button {
-                    showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: subfolder, path: folderPath + [validIdx])
+                    showHiddenFavoriteAlert = viewModel.toggleFolderFavorite(folder: displayFolder, path: folderPath + [validIdx])
                 } label: {
-                    Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: subfolder.id) ? "star.fill" : "star")
+                    Label("Favorito", systemImage: viewModel.isFolderFavorite(folderId: displayFolder.id) ? "star.fill" : "star")
                 }
                 Button {
                     isSelectionMode = true
-                    selectedItemIds.insert(subfolder.id)
+                    selectedItemIds.insert(displayFolder.id)
                 } label: {
                     Label("Seleccionar", systemImage: "checkmark.circle")
                 }
                 Button {
-                    editingElement = EditingInfo(folder: subfolder, path: folderPath + [validIdx])
+                    editingElement = EditingInfo(folder: displayFolder, path: folderPath + [validIdx])
                 } label: {
                     Label("Editar", systemImage: "pencil")
                 }
@@ -253,17 +262,17 @@ struct FolderDetailGalleryView: View {
                             showingHiddenAncestorAlert = true
                         }
                     } else {
-                        viewModel.toggleFolderHidden(folder: subfolder, path: folderPath + [validIdx])
+                        viewModel.toggleFolderHidden(folder: displayFolder, path: folderPath + [validIdx])
                     }
                 } label: {
                     if isInHiddenContext {
                         Label("Mostrar", systemImage: "eye")
                     } else {
-                        Label(subfolder.isHidden ? "Mostrar" : "Ocultar", systemImage: subfolder.isHidden ? "eye" : "eye.slash")
+                        Label(displayFolder.isHidden ? "Mostrar" : "Ocultar", systemImage: displayFolder.isHidden ? "eye" : "eye.slash")
                     }
                 }
                 Button(role: .destructive) {
-                    folderToDelete = subfolder
+                    folderToDelete = displayFolder
                 } label: {
                     Label("Eliminar", systemImage: "trash")
                 }

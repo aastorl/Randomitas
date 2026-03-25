@@ -37,4 +37,9 @@ final class HistoryService {
         store.deleteHistoryEntry(id: id)
         return store.loadHistory()
     }
+    
+    func clearHistory() -> [HistoryEntry] {
+        store.deleteAllHistory()
+        return store.loadHistory()
+    }
 }

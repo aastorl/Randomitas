@@ -75,4 +75,15 @@ final class HistoryStore: HistoryStoreProtocol {
             logger.error("Error: \(error.localizedDescription, privacy: .public)")
         }
     }
+    
+    func deleteAllHistory() {
+        let request = NSFetchRequest<HistoryEntity>(entityName: "HistoryEntity")
+        do {
+            let entities = try coreDataStack.context.fetch(request)
+            entities.forEach { coreDataStack.context.delete($0) }
+            coreDataStack.save()
+        } catch {
+            logger.error("Error: \(error.localizedDescription, privacy: .public)")
+        }
+    }
 }

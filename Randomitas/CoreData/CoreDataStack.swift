@@ -30,6 +30,12 @@ class CoreDataStack {
             container.persistentStoreDescriptions = [description]
         }
         
+        // Enable lightweight migration so model changes between versions don't wipe data
+        let description = container.persistentStoreDescriptions.first ?? NSPersistentStoreDescription()
+        description.setOption(true as NSNumber, forKey: NSMigratePersistentStoresAutomaticallyOption)
+        description.setOption(true as NSNumber, forKey: NSInferMappingModelAutomaticallyOption)
+        container.persistentStoreDescriptions = [description]
+
         container.loadPersistentStores { description, error in
             if let error = error as NSError? {
                 self.logger.error("Core Data Error: \(error.localizedDescription, privacy: .public)")
@@ -40,9 +46,12 @@ class CoreDataStack {
         container.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         
         // Limpiar base de datos en el primer inicio tras reestructurar para usar solo carpetas
+        // Solo en DEBUG para evitar wipes en builds de App Store.
+        #if DEBUG
         if !inMemory {
             cleanDatabaseIfNeeded()
         }
+        #endif
     }
     
     private func cleanDatabaseIfNeeded() {

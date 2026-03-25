@@ -18,6 +18,13 @@ final class ImageStore {
     private let prefix = "imgref:"
 
     private var baseURL: URL {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport
+            .appendingPathComponent("Randomitas", isDirectory: true)
+            .appendingPathComponent("FolderImages", isDirectory: true)
+    }
+
+    private var legacyBaseURL: URL {
         let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
         return cacheDir.appendingPathComponent("FolderImages", isDirectory: true)
     }
@@ -50,18 +57,41 @@ final class ImageStore {
             return cached as Data
         }
         let url = baseURL.appendingPathComponent(reference)
-        guard let data = try? Data(contentsOf: url) else { return nil }
-        cache.setObject(data as NSData, forKey: reference as NSString)
-        return data
+        if let data = try? Data(contentsOf: url) {
+            cache.setObject(data as NSData, forKey: reference as NSString)
+            return data
+        }
+
+        // Legacy fallback: try to load from caches and migrate to Application Support.
+        let legacyURL = legacyBaseURL.appendingPathComponent(reference)
+        if let legacyData = try? Data(contentsOf: legacyURL) {
+            do {
+                try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+                try legacyData.write(to: url, options: [.atomic])
+                try FileManager.default.removeItem(at: legacyURL)
+            } catch {
+                logger.error("Error migrating legacy image: \(error.localizedDescription, privacy: .public)")
+            }
+            cache.setObject(legacyData as NSData, forKey: reference as NSString)
+            return legacyData
+        }
+
+        return nil
     }
 
     func deleteImage(reference: String) {
         let url = baseURL.appendingPathComponent(reference)
+        let legacyURL = legacyBaseURL.appendingPathComponent(reference)
         do {
             try FileManager.default.removeItem(at: url)
-            cache.removeObject(forKey: reference as NSString)
         } catch {
             logger.error("Error deleting image reference: \(error.localizedDescription, privacy: .public)")
         }
+        do {
+            try FileManager.default.removeItem(at: legacyURL)
+        } catch {
+            // Best-effort cleanup for legacy cache.
+        }
+        cache.removeObject(forKey: reference as NSString)
     }
 }

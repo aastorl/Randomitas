@@ -40,6 +40,7 @@ protocol HistoryStoreProtocol: AnyObject {
     func saveHistory(_ entry: HistoryEntry)
     func deleteHistoryOlderThan(_ cutoff: Date)
     func deleteHistoryEntry(id: UUID)
+    func deleteAllHistory()
 }
 
 protocol PreferencesStoreProtocol: AnyObject {

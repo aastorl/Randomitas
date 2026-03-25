@@ -42,20 +42,32 @@
     },
     "%lld elemento%@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Item%2$@"
+          }
+        },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld elemento%2$@"
+            "state" : "translated",
+            "value" : "%1$lld Elemento%2$@"
           }
         }
       }
     },
     "%lld elemento%@ creado%@" : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Item%2$@ created"
+          }
+        },
         "es" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld elemento%2$@ creado%3$@"
+            "state" : "translated",
+            "value" : "%1$lld Elemento%2$@ creado%3$@"
           }
         }
       }
@@ -169,13 +181,27 @@
         }
       }
     },
-    "Agregar Imagen" : {
+    "Agregar imagen" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Add Image"
+            "value" : "Add image"
+          }
+        }
+      }
+    },
+    "Agregar Imagen" : {
+
+    },
+    "Borrar todo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete all"
           }
         }
       }
@@ -220,6 +246,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Search Items"
+          }
+        }
+      }
+    },
+    "Cambiar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change"
           }
         }
       }
@@ -373,7 +410,24 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Grid"
+            "value" : "Grid View"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista de Cuadrícula "
+          }
+        }
+      }
+    },
+    "Descartar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard"
           }
         }
       }
@@ -593,7 +647,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gallery"
+            "value" : "Gallery View"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista de Galería"
           }
         }
       }
@@ -605,6 +665,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Save"
+          }
+        }
+      }
+    },
+    "Hay un nombre escrito que no fue creado. ¿Descartar o seguir editando?" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "There is a typed name that was not created. Discard or keep editing?"
           }
         }
       }
@@ -659,7 +730,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "List"
+            "value" : "List View"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vista de Lista"
           }
         }
       }
@@ -939,16 +1016,19 @@
         }
       }
     },
-    "Nombre del Elemento" : {
+    "Nombre del elemento" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Item Name"
+            "value" : "Item name"
           }
         }
       }
+    },
+    "Nombre del Elemento" : {
+
     },
     "Nombre duplicado" : {
       "extractionState" : "manual",
@@ -979,6 +1059,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Name required"
+          }
+        }
+      }
+    },
+    "Nombre sin guardar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unsaved name"
           }
         }
       }
@@ -1154,13 +1245,26 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Reorganize your items by moving or copying them between items."
+            "value" : "Reorganize your items by moving or copying between them."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reorganizá tus elementos moviéndolos o copiándolos entre ellos."
           }
         }
       }
     },
     "Reorganizá tus elementos moviéndolos o copiándolos entre elementos." : {
-
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reorganize your Items by moving or copying between them."
+          }
+        }
+      }
     },
     "Se eliminará \"%@\" permanentemente." : {
       "extractionState" : "manual",
@@ -1169,6 +1273,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "\"%@\" will be permanently deleted."
+          }
+        }
+      }
+    },
+    "Seguir editando" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep editing"
           }
         }
       }
@@ -1389,6 +1504,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "An item with the same name already exists"
+          }
+        }
+      }
+    },
+    "Ya existe un elemento con ese nombre" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An item with that name already exists"
           }
         }
       }

@@ -55,7 +55,7 @@ struct EditElementSheet: View {
                 VStack(spacing: 20) {
                     // Renombrar
                     VStack(alignment: .leading, spacing: 8) {
-                        TextField("Nombre del Elemento", text: $editedName)
+                        TextField("Nombre del elemento", text: $editedName)
                             .padding()
                             .background(Color(.systemGray6))
                             .cornerRadius(10)
@@ -156,7 +156,7 @@ struct EditElementSheet: View {
                             HStack {
                                 Image(systemName: "photo")
                                     .foregroundStyle(.primary)
-                                Text("Agregar Imagen")
+                                Text("Agregar imagen")
                                     .foregroundStyle(.primary)
                                 Spacer()
                                 Image(systemName: "chevron.right")

@@ -290,6 +290,10 @@ class RandomitasViewModel: ObservableObject {
     func removeHistoryEntry(id: UUID) {
         history = historyService.removeHistoryEntry(id: id)
     }
+    
+    func clearHistory() {
+        history = historyService.clearHistory()
+    }
 
     // MARK: - Imágenes
     func updateFolderImage(imageData: Data?, at folderPath: [Int]) {
