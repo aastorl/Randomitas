@@ -55,7 +55,7 @@ struct NewFolderSheet: View {
                 
                 // Campos de entrada
                 VStack(spacing: 15) {
-                    TextField("Nombre del Elemento", text: $name)
+                    TextField("Nombre del elemento", text: $name)
                         .focused($isNameFieldFocused)
                         .padding()
                         .background(Color(.systemGray6))
@@ -107,7 +107,7 @@ struct NewFolderSheet: View {
                         HStack {
                             Image(systemName: "photo")
                                 .foregroundStyle(.primary)
-                            Text("Agregar Imagen")
+                            Text("Agregar imagen")
                                 .foregroundStyle(.primary)
                             Spacer()
                             Image(systemName: "chevron.right")
@@ -260,7 +260,7 @@ struct NewFolderSheet: View {
                 Text(createdNames.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n"))
             }
         }
-        .presentationDetents([selectedImageData != nil ? .fraction(0.75) : .fraction(0.45)])
+        .presentationDetents([selectedImageData != nil ? .fraction(0.65) : .fraction(0.45)])
         .onAppear {
             // Respuesta háptica: doble para lote posterior, simple al instante
             if batchMode {

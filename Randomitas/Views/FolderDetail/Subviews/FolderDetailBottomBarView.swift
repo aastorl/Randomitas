@@ -17,15 +17,14 @@ struct FolderDetailBottomBarView: View {
     var body: some View {
         VStack {
             Spacer()
-            if uiState.isSearching {
-                searchBar
-                    .padding(.leading, isPadLandscape ? 88 : 0)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            } else {
+            ZStack {
                 bottomActionBar
-                    .padding(.leading, isPadLandscape ? 88 : 0)
-                    .transition(.scale.combined(with: .opacity))
+                if uiState.isSearching {
+                    searchBar
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .padding(.leading, isPadLandscape ? 88 : 0)
         }
     }
 
@@ -64,7 +63,8 @@ struct FolderDetailBottomBarView: View {
     }
 
     private var bottomActionBar: some View {
-        ZStack {
+        let showButtons = !uiState.isSearching
+        return ZStack {
             HStack {
                 Circle()
                     .fill(Color.clear)
@@ -91,16 +91,21 @@ struct FolderDetailBottomBarView: View {
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 20)
             .allowsHitTesting(false)
+            .opacity(showButtons ? 1 : 0)
+            .transaction { $0.animation = nil }
 
-            HStack {
-                hiddenButton
-                Spacer()
-                randomizeButton
-                Spacer()
-                favoritesButton
+            if showButtons {
+                HStack {
+                    hiddenButton
+                    Spacer()
+                    randomizeButton
+                    Spacer()
+                    favoritesButton
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .transition(.scale.combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 20)
         }
         .padding(.bottom, 0)
         .padding(.top, 20)
@@ -118,6 +123,8 @@ struct FolderDetailBottomBarView: View {
             .padding(.top, -40)
             .padding(.bottom, -100)
             .allowsHitTesting(false)
+            .opacity(showButtons ? 1 : 0)
+            .transaction { $0.animation = nil }
         )
     }
 

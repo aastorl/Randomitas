@@ -280,7 +280,7 @@ struct ResultSheet: View {
             selection: $selectedDetent
         )
         .presentationContentInteraction(.scrolls)
-        .presentationDragIndicator(currentFolder.imageData != nil ? .hidden : .visible)
+        // .presentationDragIndicator(currentFolder.imageData != nil ? .hidden : .visible)
         .alert("Elemento Oculto", isPresented: $showHiddenFavoriteAlert) {
             Button("OK", role: .cancel) { }
         } message: {

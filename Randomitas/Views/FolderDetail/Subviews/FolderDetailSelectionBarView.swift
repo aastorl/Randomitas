@@ -35,7 +35,7 @@ struct FolderDetailSelectionBarView: View {
                         }
                     }
                     .padding(14)
-                    .background(.ultraThinMaterial)
+                    .background(.thinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 18))
                     .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 6)
                     .shadow(color: .black.opacity(0.08), radius: 3, x: 0, y: 2)
@@ -60,8 +60,9 @@ struct FolderDetailSelectionBarView: View {
                         selectionDeleteButton
                     }
                     .padding(.horizontal, 16)
-                    .padding(.vertical, 16)
-                    .background(.ultraThinMaterial)
+                    .padding(.top, 12)
+                    .padding(.bottom, 4)
+                    .background(.thinMaterial)
                     .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
                     .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: -1)
                 }
@@ -147,8 +148,8 @@ struct FolderDetailSelectionBarView: View {
             }
             .frame(width: isPadLandscape ? 140 : nil, height: 60)
             .frame(maxWidth: isPadLandscape ? nil : .infinity)
-            .background(uiState.selectedItemIds.isEmpty ? Color(.systemGray5) : Color.orange.opacity(0.12))
-            .foregroundColor(uiState.selectedItemIds.isEmpty ? .gray : .orange)
+            .background(uiState.selectedItemIds.isEmpty ? Color(.systemGray5) : ((uiState.showingHiddenElements || isInHiddenContext) ? Color.green.opacity(0.12) : Color.orange.opacity(0.12)))
+            .foregroundColor(uiState.selectedItemIds.isEmpty ? .gray : ((uiState.showingHiddenElements || isInHiddenContext) ? .green : .orange))
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .disabled(uiState.selectedItemIds.isEmpty)

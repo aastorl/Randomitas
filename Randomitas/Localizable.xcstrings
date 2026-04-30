@@ -192,20 +192,6 @@
         }
       }
     },
-    "Agregar Imagen" : {
-
-    },
-    "Borrar todo" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete all"
-          }
-        }
-      }
-    },
     "Atrás" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -224,6 +210,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Welcome to Randomitas!"
+          }
+        }
+      }
+    },
+    "Borrar todo" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete all"
           }
         }
       }
@@ -1026,9 +1023,6 @@
           }
         }
       }
-    },
-    "Nombre del Elemento" : {
-
     },
     "Nombre duplicado" : {
       "extractionState" : "manual",

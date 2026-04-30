@@ -260,6 +260,6 @@ struct EditElementSheet: View {
                 Text("Para modificar la visibilidad de este elemento, debes desocultar: \(hiddenAncestorAlertName)")
             }
         }
-        .presentationDetents([selectedImageData != nil ? .fraction(0.85) : .fraction(0.6)])
+        .presentationDetents([selectedImageData != nil ? .fraction(0.75) : .fraction(0.55)])
     }
 }
